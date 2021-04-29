@@ -197,6 +197,24 @@ object TrackSuite extends DefaultRunnableSpec {
           assert(result)(isSome(equalTo(expected)))
         },
 
+        test("Bongos & Tambourines (Simple Symmetry Remix)") {
+          val result = TP.parseTitle("Bongos & Tambourines (Simple Symmetry Remix)")
+          val expected = Title("Bongos & Tambourines", None, Some("(Simple Symmetry Remix)"))
+          assert(result)(isSome(equalTo(expected)))
+        },
+
+        test("A (Remix)") {
+          val result = TP.parseTitle("A (Remix)")
+          val expected = Title("A", None, Some("(Remix)"))
+          assert(result)(isSome(equalTo(expected)))
+        },
+
+        test("Unicode (Original Dub)") {
+          val result = TP.parseTitle("We're Funkin' ♫♫♫ !!! (Original Dub)")
+          val expected = Title("We're Funkin' ♫♫♫ !!!", None, Some("(Original Dub)"))
+          assert(result)(isSome(equalTo(expected)))
+        },
+
       )
     )
   }

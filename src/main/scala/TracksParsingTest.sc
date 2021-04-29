@@ -3,21 +3,16 @@ import scala.jdk.StreamConverters.StreamHasToScala
 import pd2.data.TrackParsing
 import java.io.FileWriter
 import java.io.PrintWriter
+import java.nio.charset.StandardCharsets
 
 val dataPath = "c:\\Music-Sly\\PreviewsDownloader\\data\\tracks\\"
 
-val _ = for {
-  file <- Files.list(Path.of(dataPath))
-  line <- Files.lines(file)
-  (artist, title) = line.splitAt(line.indexOf('\t'))
-} yield (artist, title)
-
 val notParsing = Files.list(Path.of(dataPath))
-  .flatMap(path => Files.lines(path))
-  .map(line => line.splitAt(line.indexOf('\t')))
+  .flatMap(path => Files.lines(path, StandardCharsets.UTF_8))
+  .map(line => line.split('\t'))
   //.limit(1000)
   .toScala(List)
-  .map { case (artistStr:String, titleStr:String) => (artistStr.trim, titleStr.trim) }
+  .map(parts => (parts(0).trim, parts(1).trim))
   .map { case (artistStr, titleStr) =>
     val parsedArtist = TrackParsing.parseArtists(artistStr)
     val parsedTitle = TrackParsing.parseTitle(titleStr)
@@ -29,7 +24,6 @@ val notParsing = Files.list(Path.of(dataPath))
   .map {case (artistStr, parsedArtist, titleStr, parsedTitle) =>
     s"$artistStr - $titleStr"
   }
-
 
 
 val pw = new PrintWriter(new FileWriter("d:\\!temp\\notParsing.txt"))

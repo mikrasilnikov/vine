@@ -1,7 +1,7 @@
 package pd2.data
 
 import cats.parse.{Parser => P, Parser0 => P0}
-import cats.parse.Parser.not
+import cats.parse.Parser.{anyChar, not}
 import cats.parse.Rfc5234.{char, sp}
 
 
@@ -36,7 +36,7 @@ object TrackParsing {
   val notSp = P.charWhere(c => !Character.isSpaceChar(c))
 
   //val single = (notSp ~ (char.soft <* not(anySep)).rep0 ~ char.?).string.map(_.trim).map(Single)
-  val single = ((char.soft <* not(P.end | anySep)).rep0.with1 ~ char).string.map(Single)
+  val single = ((anyChar.soft <* not(P.end | anySep)).rep0.with1 ~ anyChar).string.map(Single)
 
   val artistP = P.recursive[Artist] { recurse =>
     val coopP = ((single <* coopSep) ~ recurse).map(Coop.tupled)
@@ -102,7 +102,8 @@ object TrackParsing {
     val partsOption = for {
       start <- findLastParenthesesGroupStart(s)
       candidateLower = s.substring(start+1, s.length-1).toLowerCase
-      _ <- mixLabelsSpacePrefixed.find(l => candidateLower.endsWith(l))
+      _ <- mixLabelsSpacePrefixed.find(l => candidateLower.endsWith(l)) // (... ... Remix) или (Dub)
+        .orElse(mixLabels.find(l => candidateLower == l))
       (title, mix) = s.splitAt(start)
     } yield (title.stripTrailing(), mix)
 
@@ -140,8 +141,7 @@ object TrackParsing {
     artistsP.parse(s) match {
       case Right((_, result)) => result.toList match {
         case Feat(Single(actualTitle), artist) :: tail => Some((actualTitle, Some(artist :: tail)))
-        case List(Single(actualTitle)) => Some((actualTitle, None))
-        case _ => None
+        case _ => Some((s, None))
       }
       case _ => None
     }
