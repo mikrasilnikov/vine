@@ -4,7 +4,6 @@ import cats.parse.{Parser => P, Parser0 => P0}
 import cats.parse.Parser.{anyChar, not}
 import cats.parse.Rfc5234.{char, sp}
 
-
 object TrackParsing {
 
   private val mixLabels = List("mix", "remix", "dub", "rub", "instrumental", "original", "extended", "edit")
