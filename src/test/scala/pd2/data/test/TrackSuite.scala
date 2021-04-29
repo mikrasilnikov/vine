@@ -2,124 +2,202 @@ package pd2.data.test
 
 import zio.test._
 import zio.test.Assertion._
-import pd2.data.Track
-import pd2.data.Track._
+import pd2.data.{Track, TrackParsing => TP}
+import pd2.data.TrackParsing._
 
 object TrackSuite extends DefaultRunnableSpec {
-  def spec =
-    suite("Artist parsing")(
 
-      test("Tommy Largo") {
-        val result = Track.parseArtists("Tommy Largo")
-        val expected = List[Artist](Single("Tommy Largo"))
-        assert(result)(isSome(equalTo(expected)))
-      },
+  def spec = {
+    suite ("Track Suite") (
 
-      test("Demuir, Tommy Largo") {
-        val result = Track.parseArtists("Demuir, Tommy Largo")
+      suite("Artist parsing") (
 
-        val expected = List[Artist](
-          Single("Demuir"),
-          Single("Tommy Largo"))
+        test("Tommy Largo") {
+          val result = TP.parseArtists("Tommy Largo")
+          val expected = List[Artist](Single("Tommy Largo"))
+          assert(result)(isSome(equalTo(expected)))
+        },
 
-        assert(result)(isSome(equalTo(expected)))
-      },
+        test("Demuir, Tommy Largo") {
+          val result = TP.parseArtists("Demuir, Tommy Largo")
 
-      test("Damian Lazarus & The Ancient Moons") {
-        val result = Track.parseArtists("Damian Lazarus & The Ancient Moons")
+          val expected = List[Artist](
+            Single("Demuir"),
+            Single("Tommy Largo"))
 
-        val expected = List[Artist](
-          Coop(Single("Damian Lazarus"), Single("The Ancient Moons")))
+          assert(result)(isSome(equalTo(expected)))
+        },
 
-        assert(result)(isSome(equalTo(expected)))
-      },
+        test("Damian Lazarus & The Ancient Moons") {
+          val result = TP.parseArtists("Damian Lazarus & The Ancient Moons")
 
-      test("Damian Lazarus, Damian Lazarus & The Ancient Moons") {
-        val result = Track.parseArtists("Damian Lazarus, Damian Lazarus & The Ancient Moons")
+          val expected = List[Artist](
+            Coop(Single("Damian Lazarus"), Single("The Ancient Moons")))
 
-        val expected = List[Artist](
-          Single("Damian Lazarus"),
-          Coop(Single("Damian Lazarus"), Single("The Ancient Moons")))
+          assert(result)(isSome(equalTo(expected)))
+        },
 
-        assert(result)(isSome(equalTo(expected)))
-      },
+        test("Damian Lazarus, Damian Lazarus & The Ancient Moons") {
+          val result = TP.parseArtists("Damian Lazarus, Damian Lazarus & The Ancient Moons")
 
-      test("Groove Junkies, Scott K., Indeya, Groove Junkies & Scott K.") {
-        val result = Track.parseArtists("Groove Junkies, Scott K., Indeya, Groove Junkies & Scott K.")
+          val expected = List[Artist](
+            Single("Damian Lazarus"),
+            Coop(Single("Damian Lazarus"), Single("The Ancient Moons")))
 
-        val expected = List[Artist](
-          Single("Groove Junkies"),
-          Single("Scott K."),
-          Single("Indeya"),
-          Coop(Single("Groove Junkies"), Single("Scott K.")))
+          assert(result)(isSome(equalTo(expected)))
+        },
 
-        assert(result)(isSome(equalTo(expected)))
-      },
+        test("Groove Junkies, Scott K., Indeya, Groove Junkies & Scott K.") {
+          val result = TP.parseArtists("Groove Junkies, Scott K., Indeya, Groove Junkies & Scott K.")
 
-      test("A & B & C") {
-        val result = Track.parseArtists(
-          "A & B & C")
+          val expected = List[Artist](
+            Single("Groove Junkies"),
+            Single("Scott K."),
+            Single("Indeya"),
+            Coop(Single("Groove Junkies"), Single("Scott K.")))
 
-        val expected = List[Artist](
-          Coop(
+          assert(result)(isSome(equalTo(expected)))
+        },
+
+        test("A & B & C") {
+          val result = TP.parseArtists(
+            "A & B & C")
+
+          val expected = List[Artist](
             Coop(
-              Single("A"),
-              Single("B")),
-            Single("C")))
-
-        assert(result)(isSome(equalTo(expected)))
-      },
-
-      test("A feat B feat C") {
-        val result = Track.parseArtists("A feat B feat C")
-
-        val expected = List[Artist] (
-          Feat(Feat(Single("A"), Single("B")), Single("C")))
-
-        assert(result)(isSome(equalTo(expected)))
-      },
-
-      test("Rudimental & The Martinez Brothers feat. Donna Missal, Rudimental, The Martinez Brothers, Donna Missal") {
-        val result = Track.parseArtists(
-          "Rudimental & The Martinez Brothers feat. Donna Missal, Rudimental, The Martinez Brothers, Donna Missal")
-
-        val expected = List[Artist](
-          Feat(
               Coop(
-                Single("Rudimental"),
-                Single("The Martinez Brothers")),
-            Single("Donna Missal")),
-          Single("Rudimental"),
-          Single("The Martinez Brothers"),
-          Single("Donna Missal"))
+                Single("A"),
+                Single("B")),
+              Single("C")))
 
-        assert(result)(isSome(equalTo(expected)))
-      },
+          assert(result)(isSome(equalTo(expected)))
+        },
 
-      test("Justin Robertson Presents Revtone") {
-        val result = Track.parseArtists(
-          "Justin Robertson Presents Revtone")
+        test("A feat B feat C") {
+          val result = TP.parseArtists("A feat B feat C")
 
-        val expected = List[Artist](
-          Pres(
-            Single("Justin Robertson"),
-            Single("Revtone")))
+          val expected = List[Artist] (
+            Feat(Feat(Single("A"), Single("B")), Single("C")))
 
-        assert(result)(isSome(equalTo(expected)))
-      },
+          assert(result)(isSome(equalTo(expected)))
+        },
 
-      test("Downtown pres Annette Bowen feat. Nikki_O") {
-        val result = Track.parseArtists(
-          "Downtown pres Annette Bowen feat. Nikki_O")
+        test("A pres B pres C") {
+          val result = TP.parseArtists("A pres B pres C")
 
-        val expected = List[Artist](
-          Pres(
-            Single("Downtown"),
+          val expected = List[Artist] (
+            Pres(Pres(Single("A"), Single("B")), Single("C")))
+
+          assert(result)(isSome(equalTo(expected)))
+        },
+
+        test("Rudimental & The Martinez Brothers feat. Donna Missal, Rudimental, The Martinez Brothers, Donna Missal") {
+          val result = TP.parseArtists(
+            "Rudimental & The Martinez Brothers feat. Donna Missal, Rudimental, The Martinez Brothers, Donna Missal")
+
+          val expected = List[Artist](
             Feat(
-              Single("Annette Bowen"),
-              Single("Nikki_O"))))
+                Coop(
+                  Single("Rudimental"),
+                  Single("The Martinez Brothers")),
+              Single("Donna Missal")),
+            Single("Rudimental"),
+            Single("The Martinez Brothers"),
+            Single("Donna Missal"))
 
-        assert(result)(isSome(equalTo(expected)))
-      }
+          assert(result)(isSome(equalTo(expected)))
+        },
+
+        test("Justin Robertson Presents Revtone") {
+          val result = TP.parseArtists(
+            "Justin Robertson Presents Revtone")
+
+          val expected = List[Artist](
+            Pres(
+              Single("Justin Robertson"),
+              Single("Revtone")))
+
+          assert(result)(isSome(equalTo(expected)))
+        },
+
+        test("Downtown pres Annette Bowen feat. Nikki_O") {
+          val result = TP.parseArtists(
+            "Downtown pres Annette Bowen feat. Nikki_O")
+
+          val expected = List[Artist](
+            Pres(
+              Single("Downtown"),
+              Feat(
+                Single("Annette Bowen"),
+                Single("Nikki_O"))))
+
+          assert(result)(isSome(equalTo(expected)))
+        }
+      ),
+
+      suite("Title parsing") (
+
+        test("On Dat High") {
+          val result = TP.parseTitle("On Dat High")
+          val expected = Title("On Dat High", None, None)
+          assert(result)(isSome(equalTo(expected)))
+        },
+
+        test("On Dat High (Original Mix)") {
+          val result = TP.parseTitle("On Dat High (Original Mix)")
+          val expected = Title("On Dat High", None, Some("(Original Mix)"))
+          assert(result)(isSome(equalTo(expected)))
+        },
+
+        test("On Dat High feat. Tommy Largo") {
+          val result = TP.parseTitle("On Dat High feat. Tommy Largo")
+          val expectedArists = Single("Tommy Largo") :: Nil
+          val expected = Title("On Dat High", Some(expectedArists), None)
+          assert(result)(isSome(equalTo(expected)))
+        },
+
+        test("On Dat High (feat. Tommy Largo)") {
+          val result = TP.parseTitle("On Dat High (feat. Tommy Largo)")
+          val expectedArists = Single("Tommy Largo") :: Nil
+          val expected = Title("On Dat High", Some(expectedArists), None)
+          assert(result)(isSome(equalTo(expected)))
+        },
+
+        test("On Dat High feat. Tommy Largo (Original Mix)") {
+          val result = TP.parseTitle("On Dat High feat. Tommy Largo (Original Mix)")
+          val expectedArists = Single("Tommy Largo") :: Nil
+          val expected = Title("On Dat High", Some(expectedArists), Some("(Original Mix)"))
+          assert(result)(isSome(equalTo(expected)))
+        },
+
+        test("On Dat High (feat. Tommy Largo) (Original Mix)") {
+          val result = TP.parseTitle("On Dat High (feat. Tommy Largo) (Original Mix)")
+          val expectedArists = Single("Tommy Largo") :: Nil
+          val expected = Title("On Dat High", Some(expectedArists), Some("(Original Mix)"))
+          assert(result)(isSome(equalTo(expected)))
+        },
+
+        test("Vibesin' (feat. OneDa & Trigga) (Original Mix)") {
+          val result = TP.parseTitle("Vibesin' (feat. OneDa & Trigga) (Original Mix)")
+          val expectedArists = Coop(Single("OneDa"), Single("Trigga")) :: Nil
+          val expected = Title("Vibesin'", Some(expectedArists), Some("(Original Mix)"))
+          assert(result)(isSome(equalTo(expected)))
+        },
+
+        test("All My Life (feat. Andrea Martin, Sean Declase) (Mark Brickman Extended Remix)") {
+          val result = TP.parseTitle("All My Life (feat. Andrea Martin, Sean Declase) (Mark Brickman Extended Remix)")
+          val featuredArtist = Single("Andrea Martin") :: Single("Sean Declase") :: Nil
+          val expected = Title("All My Life", Some(featuredArtist), Some("(Mark Brickman Extended Remix)"))
+          assert(result)(isSome(equalTo(expected)))
+        },
+
+        test("Lensor Express (Original Mix)") {
+          val result = TP.parseTitle("Lensor Express (Original Mix)")
+          val expected = Title("Lensor Express", None, Some("(Original Mix)"))
+          assert(result)(isSome(equalTo(expected)))
+        },
+
+      )
     )
+  }
 }
