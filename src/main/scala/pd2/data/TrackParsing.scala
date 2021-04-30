@@ -9,7 +9,8 @@ object TrackParsing {
   private val mixLabels = List("mix", "remix", "dub", "rub", "instrumental", "original", "extended", "edit")
   private val mixLabelsSpacePrefixed = mixLabels.map(' ' + _)
 
-  private val featLabels = List("featuring", "feat.", "feat", "ft.", "ft")
+  private val featTokens = List("featuring", "feat.", "feat", "ft.", "ft")
+  private val presTokens = List("presents", "pres.", "pres")
 
   sealed trait Artist
   case class Single(name : String) extends Artist
@@ -24,17 +25,14 @@ object TrackParsing {
   val pairSep = sp.rep.?.soft ~ P.char(',') ~ sp.rep.?
   val coopSep = sp.rep.?.soft ~ P.char('&') ~ sp.rep.?
 
-  val pres = P.oneOf(List(P.ignoreCase("presents"), P.ignoreCase("pres."), P.ignoreCase("pres")))
+  val pres = P.oneOf(presTokens.map(P.ignoreCase))
   val presSep = sp.rep.soft ~ pres ~ sp.rep
 
-  val feat = P.oneOf(List(P.ignoreCase("featuring"), P.ignoreCase("feat."), P.ignoreCase("feat")))
+  val feat = P.oneOf(featTokens.map(P.ignoreCase))
   val featSep = sp.rep.soft ~ feat ~ sp.rep
 
   val anySep = presSep.backtrack | featSep.backtrack | pairSep.backtrack | coopSep
 
-  val notSp = P.charWhere(c => !Character.isSpaceChar(c))
-
-  //val single = (notSp ~ (char.soft <* not(anySep)).rep0 ~ char.?).string.map(_.trim).map(Single)
   val single = ((anyChar.soft <* not(P.end | anySep)).rep0.with1 ~ anyChar).string.map(Single)
 
   val artistP = P.recursive[Artist] { recurse =>
@@ -50,26 +48,32 @@ object TrackParsing {
 
   // </editor-fold>
 
-  private def rotateLeft(artist : Artist) : Artist = artist match {
-    case Coop(a0, Feat(a1, a2)) => Feat(Coop(a0, a1), rotateLeft(a2)) // (A & B) feat C
-    case Coop(a0, Pres(a1, a2)) => Pres(Coop(a0, a1), rotateLeft(a2)) // (A & B) pres C
-    case Coop(a0, Coop(a1, a2)) => Coop(Coop(a0, a1), rotateLeft(a2))
-    case Coop(a0, that) => Coop(a0, rotateLeft(that))
+  /*
+    Рекурсивный парсер дает на выходе right-associative структуру данных, типа
+      A & B & C -> Coop(A, Coop(B, C))
+    В реальной жизни некоторые из таких комбинаций следует читать по-другому, например
+      A & B feat C должно быть Feat(Coop(A, B), C)),
+    потому что тут имееется ввиду, что пара A & B используют материал исполнителя C.
+   */
+  private def fixPriorities(artist : Artist) : Artist = artist match {
+    case Coop(a0, Feat(a1, a2)) => Feat(Coop(a0, a1), fixPriorities(a2)) // (A & B) feat C
+    case Coop(a0, Pres(a1, a2)) => Pres(Coop(a0, a1), fixPriorities(a2)) // (A & B) pres C
+    case Coop(a0, Coop(a1, a2)) => Coop(Coop(a0, a1), fixPriorities(a2))
+    case Coop(a0, that) => Coop(a0, fixPriorities(that))
 
-    case Feat(a0, Feat(a1, a2)) => Feat(Feat(a0, a1), rotateLeft(a2))
-    case Feat(a0, that) => Feat(a0, rotateLeft(that))
+    case Feat(a0, Feat(a1, a2)) => Feat(Feat(a0, a1), fixPriorities(a2))
+    case Feat(a0, that) => Feat(a0, fixPriorities(that))
 
-    case Pres(a0, Pres(a1, a2)) => Pres(Pres(a0, a1), rotateLeft(a2))
-    case Pres(a0, that) => Pres(a0, rotateLeft(that))
+    case Pres(a0, Pres(a1, a2)) => Pres(Pres(a0, a1), fixPriorities(a2))
+    case Pres(a0, that) => Pres(a0, fixPriorities(that))
 
     case _ => artist
   }
 
   /*
-  Пытается найти индекс символа, с которого предположительно начинается название микса.
+  Пытается найти индекс символа, с которого начинается последняя группа скобок.
   Music Should Not Stop (Jonas Rathsman (PL) Remix)
                         ^
-  Название микса включает в себя внешние скобки.
   */
   private def findLastParenthesesGroupStart(s : String) : Option[Int] = {
     if (s.last == ')') {
@@ -100,9 +104,8 @@ object TrackParsing {
   private def extractTitleAndMixName(s : String) : (String, Option[String]) = {
     val partsOption = for {
       start <- findLastParenthesesGroupStart(s)
-      candidateLower = s.substring(start+1, s.length-1).toLowerCase
-      _ <- mixLabelsSpacePrefixed.find(l => candidateLower.endsWith(l)) // (... ... Remix) или (Dub)
-        .orElse(mixLabels.find(l => candidateLower == l))
+      mixCandidate = s.substring(start+1, s.length-1).toLowerCase
+      _ <- mixLabels.find(l => mixCandidate.endsWith(l)) // (... ... Remix) или (Dub)
       (title, mix) = s.splitAt(start)
     } yield (title.stripTrailing(), mix)
 
@@ -110,7 +113,6 @@ object TrackParsing {
       case Some((title, mix)) => (title, Some(mix))
       case None => (s, None)
     }
-
   }
 
   /*
@@ -120,8 +122,8 @@ object TrackParsing {
   private def removeParenthesesAroundFeaturedBlock(s : String) : String = {
     val featBlockStart = for {
       start <- findLastParenthesesGroupStart(s)
-      candidateLower = s.substring(start+1, s.length-1).toLowerCase
-      _ <- featLabels.find(l => candidateLower.startsWith(l))
+      featCandidate = s.substring(start+1, s.length-1).toLowerCase
+      _ <- featTokens.find(l => featCandidate.startsWith(l))
     } yield start
 
     featBlockStart.fold(s) { start =>
@@ -130,12 +132,20 @@ object TrackParsing {
   }
 
   def parseArtists(s : String) : Option[List[Artist]] = artistsP.parse(s) match {
-      case Right((_, result)) => Some(result.toList.map(rotateLeft))
+      case Right((_, result)) => Some(result.toList.map(fixPriorities))
       case _ => None
     }
 
   type ActualTitle = String
   type FeaturedArtist = Artist
+  /*
+    Парсер списка исполнителей подходит и для названия трека с featured исполнителем.
+    Например для
+      All I Need feat. Nathalie Miranda
+    на выходе будет
+      Feat(Single(All I Need), Single(Nathalie Miranda))
+    где первый Single() - это настоящее название, а второй - имя featured исполнителя.
+   */
   private def parseTitlePartUsingArtistsP(s : String) : Option[(ActualTitle, Option[List[FeaturedArtist]])] = {
     artistsP.parse(s) match {
       case Right((_, result)) => result.toList match {
@@ -147,10 +157,10 @@ object TrackParsing {
   }
 
   def parseTitle(s : String) : Option[Title] = {
-    val (beforeMix, mixOption) = extractTitleAndMixName(s)
-    val parsedBeforeMix = (removeParenthesesAroundFeaturedBlock _ andThen parseTitlePartUsingArtistsP) (beforeMix)
+    val (title, mixOption) = extractTitleAndMixName(s)
+    val parsedTitle = (removeParenthesesAroundFeaturedBlock _ andThen parseTitlePartUsingArtistsP) (title)
 
-    parsedBeforeMix match {
+    parsedTitle match {
       case Some((actualTitle, featuredArtist)) => Some(Title(actualTitle, featuredArtist, mixOption))
       case None => None
     }
