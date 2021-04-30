@@ -2,17 +2,29 @@ package pd2
 
 import java.nio.file.{Files, OpenOption, Path, StandardOpenOption}
 import scala.jdk.StreamConverters.StreamHasToScala
-import pd2.data.TrackParsing
-import pd2.data.TrackParsing.{_}
+import pd2.data.{TrackParsing, TrackRepository, TrackTable}
+import pd2.data.TrackTable.Track
+import pd2.data.TrackParsing._
 
+import java.time._
+import java.time.format.DateTimeFormatter
 import java.io.FileWriter
 import java.io.PrintWriter
 import java.nio.charset.StandardCharsets
+import scala.collection.parallel.CollectionConverters._
+import slick.jdbc.{JdbcProfile, SQLiteProfile}
+import slick.jdbc.SQLiteProfile.api._
+import zio._
+import slick.interop.zio.syntax._
+import slick.interop.zio.DatabaseProvider
+import com.typesafe.config._
+import scala.concurrent.ExecutionContext.Implicits.global
 
 object DataImport {
-  def main(args: Array[String]): Unit = {
 
-    val dataPath = "c:\\Music-Sly\\PreviewsDownloader\\data\\tracks\\"
+  case class NewRow(artist: String, title: String, label: String, releaseDate: String, feedName: String)
+
+  def rewriteTrackName(parsedArtists : List[Artist], parsedTitle : Title) : String = {
 
     def getAllNames(artist : Artist) : List[String] = artist match {
       case Single(name) => List(name)
@@ -21,69 +33,83 @@ object DataImport {
       case Pres(a1, a2) => getAllNames(a1) ++ getAllNames(a2)
     }
 
-    def rewriteTrackName(parsedArtists : List[Artist], parsedTitle : Title) : String = {
+    val artistNamesFromArtistFiled = parsedArtists.flatMap(a => getAllNames(a))
 
-      val artistNamesFromArtistFiled = parsedArtists.flatMap(a => getAllNames(a))
+    val featuredArtistNamesO = for {
+      aList <- parsedTitle.featuredArtist
+    } yield aList.flatMap(a => getAllNames(a))
 
-      val featuredArtistNamesO = for {
-        aList <- parsedTitle.featuredArtist
-      } yield aList.flatMap(a => getAllNames(a))
+    val artistNames =
+      (artistNamesFromArtistFiled ++ featuredArtistNamesO.orElse(Some(List[String]())).get)
+        .distinct
+        .sorted
 
-      val artistNames =
-        (artistNamesFromArtistFiled ++
-          featuredArtistNamesO.orElse(Some(List[String]())).get)
-          .distinct
-          .sorted
+    s"${artistNames.mkString(", ")} - ${parsedTitle.actualTitle}${parsedTitle.mix.map(" " + _).getOrElse("")}"
+  }
 
-      s"${artistNames.mkString(", ")} - ${parsedTitle.actualTitle}${parsedTitle.mix.map(" " + _).getOrElse("")}"
-    }
+  def main(args: Array[String]): Unit = {
+
+    val dataPath = "c:\\Music-Sly\\PreviewsDownloader\\data\\tracks\\"
 
     val parsedData = Files.list(Path.of(dataPath))
       .flatMap(path => Files.lines(path, StandardCharsets.UTF_8))
+      .toScala(LazyList)
+      //.take(1000)
+      .par
       .map(line => line.split('\t'))
-      .toScala(List)
-      .map(parts => (parts(0).trim, parts(1).trim))
-      .map { case (artistStr, titleStr) =>
-        val parsedArtist = TrackParsing.parseArtists(artistStr)
-        val parsedTitle = TrackParsing.parseTitle(titleStr)
+      .map { parts =>
+        val artist = parts(0)
+        val title = parts(1)
+        val label =       if (parts.length == 5) Some(parts(2)) else None
+        val releaseDate = if (parts.length == 5)
+          Some(LocalDate.parse(parts(3), DateTimeFormatter.ofPattern("dd.MM.uuuu")))
+          else None
+        val feed =    if (parts.length == 5) Some(parts(4)) else None
 
         val rewritten = for {
-          artists <- parsedArtist
-          title <- parsedTitle
+          artists <- TrackParsing.parseArtists(artist)
+          title <- TrackParsing.parseTitle(title)
         } yield rewriteTrackName(artists, title)
 
-        (artistStr, parsedArtist, titleStr, parsedTitle, rewritten)
+        if (rewritten.isEmpty)
+          throw new Exception(s"could not parse ${parts.mkString("Array(", ", ", ")")}")
+
+        Track(artist, title, rewritten.get, label, releaseDate, feed)
       }
 
-    val notParsedData = parsedData
-      .filter { case (_, parsedArtist, _, parsedTitle, _) =>
-        parsedArtist.isEmpty || parsedTitle.isEmpty
-      }
-      .map {case (artistStr, parsedArtist, titleStr, parsedTitle, _) =>
-        s"$artistStr - $titleStr"
-      }
+    val uniqueTracks = parsedData
+      .groupBy(_.uniqueName)
+      .map { case (_, items) => items.head }
+      .toList
 
-    var pw = new PrintWriter(new FileWriter("d:\\!temp\\notParsing.txt"))
-    notParsedData.foreach(l => pw.println(l))
-    pw.close()
+    println(s"uniqueTracks: ${uniqueTracks.length}")
 
-    pw = new PrintWriter(new FileWriter("d:\\!temp\\rewritten.txt"))
+    val dbio = for {
+      _ <- TrackTable.table.schema.create
+      _ <- DBIO.sequence(uniqueTracks.grouped(1000).map(part => TrackTable.table ++= part))
+      //_ <- TrackTable.table ++= uniqueTracks
+    } yield ()
 
-    parsedData
-      .filter   { case (_,_,_,_,rewritten) => rewritten.isDefined }
-      .groupBy  { case (_,_,_,_,rewritten) => rewritten.get }
-      .filter   { case (_, items) => items.length > 2 }
-      .foreach  { case (key, items) =>
+    val zio = ZIO.fromDBIO(dbio)
 
-          pw.println(key)
+    val configMap = new java.util.HashMap[String, String]
+    configMap.put("driver", "org.sqlite.JDBC")
+    configMap.put("url", "jdbc:sqlite:c:\\!temp\\testdb.db")
+    configMap.put("connectionPool", "disabled")
 
-          items.foreach { case (artistStr, _, titleStr, _, _) =>
-            pw.println(s"$artistStr - $titleStr")
-          }
+    val config = ConfigFactory.parseMap(configMap)
 
-        pw.println()
-      }
+    val dbProfile = ZLayer.succeed(slick.jdbc.SQLiteProfile.asInstanceOf[JdbcProfile])
+    val dbConfig = ZLayer.fromEffect (ZIO.effect(config))
 
-    pw.close()
+    val customLayer = (dbConfig ++ dbProfile) >>> DatabaseProvider.live
+
+    Runtime.default.unsafeRun(zio.provideCustomLayer(customLayer))
+
+
+    /*val pw = new PrintWriter(new FileWriter("d:\\!temp\\rewritten.txt"))
+    pw.println()
+    pw.close()*/
+
   }
 }

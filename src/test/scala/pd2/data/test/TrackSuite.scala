@@ -2,7 +2,7 @@ package pd2.data.test
 
 import zio.test._
 import zio.test.Assertion._
-import pd2.data.{Track, TrackParsing => TP}
+import pd2.data.{TrackParsing => TP}
 import pd2.data.TrackParsing._
 
 object TrackSuite extends DefaultRunnableSpec {
@@ -214,7 +214,6 @@ object TrackSuite extends DefaultRunnableSpec {
           val expected = Title("We're Funkin' ♫♫♫ !!!", None, Some("(Original Dub)"))
           assert(result)(isSome(equalTo(expected)))
         },
-
       )
     )
   }
