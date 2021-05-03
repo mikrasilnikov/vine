@@ -19,7 +19,7 @@ object TrackTable {
     def id          = column[Int]("Id", O.PrimaryKey, O.AutoInc)
     def artist      = column[String]("Artist")
     def title       = column[String]("Title")
-    def uniqueName = column[String]("UniqueName")
+    def uniqueName  = column[String]("UniqueName")
     def label       = column[Option[String]]("Label")
     def releaseDate = column[Option[LocalDate]]("ReleaseDate")
     def feed        = column[Option[String]]("Feed")
