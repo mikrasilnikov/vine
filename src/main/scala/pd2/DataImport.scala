@@ -3,7 +3,7 @@ package pd2
 import com.typesafe.config._
 import pd2.data.TrackParsing._
 import pd2.data.TrackTable.Track
-import pd2.data.{TrackParsing, TrackRepository}
+import pd2.data.{TrackParsing, TrackRepositoryLayer}
 import slick.interop.zio.DatabaseProvider
 import slick.jdbc.JdbcProfile
 import zio._
@@ -38,15 +38,15 @@ object DataImport extends zio.App {
     val dbProfile = ZLayer.succeed(slick.jdbc.SQLiteProfile.asInstanceOf[JdbcProfile])
     val dbConfig = ZLayer.fromEffect (ZIO.effect(config))
 
-    (dbConfig ++ dbProfile) >>> DatabaseProvider.live >>> TrackRepository.live
+    (dbConfig ++ dbProfile) >>> DatabaseProvider.live >>> TrackRepositoryLayer.live
   }
 
   private def performImport(dataPath : String) = {
     for {
       tracks <- getUniqueTracks(dataPath)
       _ <- putStrLn(s"uniqueTracks: ${ tracks.length }")
-      _ <- TrackRepository.createSchema
-      _ <- ZIO.foreach_(tracks.grouped(10).toList)(TrackRepository.insertSeq)
+      _ <- TrackRepositoryLayer.createSchema
+      _ <- ZIO.foreach_(tracks.grouped(10).toList)(TrackRepositoryLayer.insertSeq)
     } yield ()
   }
 

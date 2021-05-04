@@ -1,8 +1,9 @@
 package pd2.ui
 
-import com.sun.jna.platform.win32.{Kernel32, Wincon}
-import com.sun.jna.platform.win32.Kernel32.INSTANCE
-import com.sun.jna.ptr.IntByReference
+import com.sun.jna.Memory
+import com.sun.jna.platform.win32.{WinBase, Wincon}
+import com.sun.jna.platform.win32.Kernel32
+import com.sun.jna.ptr.{IntByReference, PointerByReference}
 import zio.console.Console
 import zio.macros.accessible
 import zio.system.System
@@ -33,8 +34,23 @@ object ConsoleUILayer {
       k32.SetConsoleMode(hConsole, currentModeRef.getValue | Wincon.ENABLE_VIRTUAL_TERMINAL_PROCESSING)
       ()
     } else {
-      throw new Exception(
-        s"Could not set ENABLE_VIRTUAL_TERMINAL_PROCESSING. Last error is ${k32.GetLastError()}")
+      val buffer = new PointerByReference()
+
+      val errorCode = k32.GetLastError()
+      val msgSize = k32.FormatMessage(
+          WinBase.FORMAT_MESSAGE_FROM_SYSTEM |
+          WinBase.FORMAT_MESSAGE_ALLOCATE_BUFFER,
+        null,
+        errorCode,
+        0,
+        buffer,
+        0,
+        null)
+
+      val message = String.valueOf(
+        buffer.getPointer.getPointer(0).getCharArray(0, 24))
+
+      throw new Exception(message)
     }
   }
 

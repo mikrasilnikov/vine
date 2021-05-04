@@ -6,7 +6,7 @@ import slick.interop.zio.DatabaseProvider
 import slick.interop.zio.syntax._
 import slick.jdbc.JdbcProfile
 
-class TrackRepositoryLive(private val db: DatabaseProvider, private val profile : JdbcProfile) extends TrackRepository.Service {
+class TrackRepositoryLive(private val db: DatabaseProvider, private val profile : JdbcProfile) extends TrackRepositoryLayer.Service {
 
   import profile.api._
   private val items = TrackTable.table
