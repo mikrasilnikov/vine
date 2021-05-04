@@ -1,12 +1,11 @@
-import zio.console.{getStrLn, putStr}
-import zio.duration.durationInt
-import zio.{ExitCode, Ref, Schedule, URIO, ZIO, system}
-import pd2.ui._
+package pd2.ui
 import com.sun.jna.platform.win32.{Kernel32, Wincon}
 import com.sun.jna.ptr.IntByReference
+import zio.console._
+import zio.system._
+import zio.{Ref, UIO, ZIO, system}
 
-
-object TerminalTest extends zio.App {
+class ConsoleUILive(runningInsideIntellij : Boolean) extends ConsoleUILayer.Service {
 
   object ConsoleASCII {
 
@@ -64,22 +63,14 @@ object TerminalTest extends zio.App {
     }
   }
 
-  override def run(args: List[String]): URIO[zio.ZEnv, ExitCode] = {
-    import pd2.ui.ConsoleUILayer._
-
-    val app = for {
-      ref <- Ref.make(PercentageBar(0, 100, ProgressBarLayout("test123", 20, 50)))
-      drawingFiber <- drawProgressBar(ref.asInstanceOf[Ref[ProgressBar]])
-        .repeat(Schedule.duration(100.millis))
-        .forever.fork
-      updatingFiber <- ref
-        .modify(bar => ((), bar.copy(current = bar.current + 1)))
-        .repeat(Schedule.duration(200.millis))
-        .forever.fork
-      _ <- getStrLn
-      _ <- drawingFiber.interrupt *> updatingFiber.interrupt
+  def drawProgressBar(barRef: Ref[ProgressBar]): ZIO[Console, Nothing, Unit] = {
+    for {
+      bar <- barRef.get
+      render = ProgressBar.render(bar)
+      _ <-  if (!runningInsideIntellij)
+              putStr(ConsoleASCII.Positioning.left(1000)) *> putStr(render)
+            else
+              putStr("\b" * 100) *> putStr(render)
     } yield ()
-
-    app.provideCustomLayer(ConsoleUILayer.live).exitCode
   }
 }
