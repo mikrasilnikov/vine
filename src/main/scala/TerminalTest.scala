@@ -1,6 +1,7 @@
 import zio.console.{getStrLn, putStr}
 import zio.duration.durationInt
 import zio.{ExitCode, Ref, Schedule, URIO, ZIO, system}
+import pd2.ui._
 import com.sun.jna.platform.win32.Kernel32
 
 object TerminalTest extends zio.App {
@@ -61,30 +62,6 @@ object TerminalTest extends zio.App {
     }
   }
 
-  case class ProgressBarLayout(label : String, labelWidth: Int, barWidth : Int)
-
-  sealed trait ProgressBar {
-    def render: String
-  }
-
-  case class PercentageBar(percentage : Int, layout : ProgressBarLayout) extends ProgressBar {
-
-    private def effectiveLabel: String = {
-      if (layout.label.length <= layout.labelWidth)
-        layout.label + (" " * (layout.labelWidth - layout.label.length))
-      else
-        layout.label.substring(0, layout.labelWidth - 1)
-    }
-
-    def render: String = {
-      val percentPerItem = 100.toDouble / layout.barWidth
-      val filledItemsCount = (percentage.toDouble / percentPerItem).ceil.toInt
-      val freeItemsCount = layout.barWidth - filledItemsCount
-      effectiveLabel + " [" + "=" * filledItemsCount  + " " * freeItemsCount  + "]"
-    }
-
-  }
-
   override def run(args: List[String]): URIO[zio.ZEnv, ExitCode] = {
 
     val setConsoleMode = ZIO.effectTotal(
@@ -95,7 +72,7 @@ object TerminalTest extends zio.App {
     def drawBar(barRef : Ref[PercentageBar]) = for {
       ijProp <- system.env("intellij-terminal")
       bar <- barRef.get
-      render = bar.render
+      render = ProgressBar.render(bar, 0)
       _ <- if (ijProp.isEmpty)
               putStr(Console.Positioning.left(1000)) *> putStr(render)
       else
@@ -104,10 +81,10 @@ object TerminalTest extends zio.App {
 
     val app = for {
       _ <- setConsoleMode
-      ref <- Ref.make(PercentageBar(0, ProgressBarLayout("test123", 20, 50)))
+      ref <- Ref.make(PercentageBar(0, 100, ProgressBarLayout("test123", 20, 50)))
       drawingFiber <- drawBar(ref).repeat(Schedule.duration(100.millis)).forever.fork
       updatingFiber <- ref
-        .modify(bar => ((), bar.copy(percentage = bar.percentage + 1)))
+        .modify(bar => ((), bar.copy(current = bar.current + 1)))
         .repeat(Schedule.duration(200.millis))
         .forever.fork
       _ <- getStrLn
