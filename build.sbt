@@ -17,7 +17,9 @@ libraryDependencies ++= Seq(
   "dev.zio" %% "zio-test"     % "1.0.6" % "test",
   "dev.zio" %% "zio-test-sbt"  % "1.0.6" % "test",
   "net.java.dev.jna" % "jna" % "5.8.0",
-  "net.java.dev.jna" % "jna-platform" % "5.8.0"
+  "net.java.dev.jna" % "jna-platform" % "5.8.0",
+  "io.argonaut" %% "argonaut" % "6.3.3",
+  "io.argonaut" %% "argonaut-monocle" % "6.3.3"
 
 )
 
