@@ -13,7 +13,6 @@ import zio.console.putStrLn
 import zio.duration.durationInt
 import zio.nio.core.file._
 import zio.nio.file._
-
 import java.io.IOException
 import java.nio.charset.StandardCharsets
 import java.time._
@@ -30,7 +29,7 @@ object DataImport extends zio.App {
 
   private def parseAndValidateParams(args: List[String]) = {
     for {
-      _ <- ZIO.fail(new IllegalArgumentException("args.length != 2")).unless(args.length == 2)
+      _ <- ZIO.fail(new IllegalArgumentException("Expecting two arguments")).unless(args.length == 2)
       outputPath = Path(args(0))
       sourcePath = Path(args(1))
       outputParent  <- ZIO.fromOption(outputPath.parent).orElseFail(new IOException("outputPath.parent is empty"))
@@ -72,6 +71,8 @@ object DataImport extends zio.App {
 
   private def performImport(params : Params) = {
     import pd2.ui.ConsoleUILayer._
+
+    val batchSize = 100
     for {
       _ <- putStrLn("Parsing source data into memory...")
       tracks <- getUniqueTracks(params.sourcePath)
@@ -79,11 +80,11 @@ object DataImport extends zio.App {
       _ <- putStrLn(s"Creating schema...")
       _ <- TrackRepositoryLayer.createSchema
       _ <- putStrLn(s"Inserting rows to database...")
-      barRef <- Ref.make(PercentageBar(0, tracks.length / 100, ProgressBarLayout("Importing data", 15, 60)))
+      barRef <- Ref.make(PercentageBar(0, tracks.length, ProgressBarLayout("Importing data", 15, 60)))
       _ <-  drawProgressBar(barRef.asInstanceOf[Ref[ProgressBar]]).repeat(Schedule.duration(250.millis)).forever.fork
-      _ <- ZIO.foreach_(tracks.grouped(100).toList)(batch =>
+      _ <- ZIO.foreach_(tracks.grouped(batchSize).toList)(batch =>
           TrackRepositoryLayer.insertSeq(batch) *>
-          barRef.update(b => b.copy(current = b.current + 1)))
+          barRef.update(b => b.copy(current = b.current + batchSize)))
     } yield ()
   }
 
