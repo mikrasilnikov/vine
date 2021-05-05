@@ -4,13 +4,16 @@ import com.typesafe.config._
 import pd2.data.TrackParsing._
 import pd2.data.TrackTable.Track
 import pd2.data.{TrackParsing, TrackRepositoryLayer}
+import pd2.ui.{ConsoleUILayer, PercentageBar, ProgressBar, ProgressBarLayout}
 import slick.interop.zio.DatabaseProvider
 import slick.jdbc.JdbcProfile
 import zio._
 import zio.blocking.Blocking
 import zio.console.putStrLn
+import zio.duration.durationInt
 import zio.nio.core.file._
 import zio.nio.file._
+
 import java.io.IOException
 import java.nio.charset.StandardCharsets
 import java.time._
@@ -18,15 +21,41 @@ import java.time.format.DateTimeFormatter
 
 object DataImport extends zio.App {
 
-  val dataPath = "c:\\Music-Sly\\PreviewsDownloader\\data\\tracks\\"
+  case class Params(sourcePath : Path, outputPath : Path)
 
-  def run(args: List[String]) = {
-    performImport(dataPath)
-      .provideCustomLayer(createCustomLayer(Path("c:\\!temp\\tracks.db")))
-      .exitCode
+  private def printUsage = for {
+    _ <- putStrLn("Usage:   java -cp pd2.DataImport {OutputFile} {SourceDataPath}")
+    _ <- putStrLn("Example: java -cp pd2.DataImport c:\\PreviewsDownloader2\\imported.db c:\\PreviwsDownloader\\data\\tracks")
+  } yield ()
+
+  private def parseAndValidateParams(args: List[String]) = {
+    for {
+      _ <- ZIO.fail(new IllegalArgumentException("args.length != 2")).unless(args.length == 2)
+      outputPath = Path(args(0))
+      sourcePath = Path(args(1))
+      outputParent  <- ZIO.fromOption(outputPath.parent).orElseFail(new IOException("outputPath.parent is empty"))
+      _ <- ZIO.fail(new IOException(s"File $outputPath already exists"))       .whenM  (Files.exists(outputPath))
+      _ <- ZIO.fail(new IOException(s"Path $outputParent does not exist"))     .unlessM(Files.exists(outputParent))
+      _ <- ZIO.fail(new IOException(s"Path $outputParent is not a directory")) .unlessM(Files.isDirectory(outputParent))
+      _ <- ZIO.fail(new IOException(s"Path $sourcePath does not exist"))       .unlessM(Files.exists(sourcePath))
+      _ <- ZIO.fail(new IOException(s"Path $sourcePath is not a directory"))   .unlessM(Files.isDirectory(sourcePath))
+    } yield Params(sourcePath, outputPath)
   }
 
-  private def createCustomLayer(targetFilePath : Path) = {
+  def run(args: List[String]) = {
+
+    def customLayer(params : Params) =
+      (createDbLayer(params.outputPath) >>> TrackRepositoryLayer.live) ++ ConsoleUILayer.live
+
+    val app = parseAndValidateParams(args)
+      .foldM (
+        e => putStrLn(e.getMessage) *> putStrLn("") *> printUsage,
+        params => performImport(params).provideCustomLayer(customLayer(params)))
+
+    app.exitCode
+  }
+
+  private def createDbLayer(targetFilePath : Path) = {
 
     val configMap = new java.util.HashMap[String, String]
     configMap.put("driver", "org.sqlite.JDBC")
@@ -38,21 +67,29 @@ object DataImport extends zio.App {
     val dbProfile = ZLayer.succeed(slick.jdbc.SQLiteProfile.asInstanceOf[JdbcProfile])
     val dbConfig = ZLayer.fromEffect (ZIO.effect(config))
 
-    (dbConfig ++ dbProfile) >>> DatabaseProvider.live >>> TrackRepositoryLayer.live
+    (dbConfig ++ dbProfile) >>> DatabaseProvider.live
   }
 
-  private def performImport(dataPath : String) = {
+  private def performImport(params : Params) = {
+    import pd2.ui.ConsoleUILayer._
     for {
-      tracks <- getUniqueTracks(dataPath)
-      _ <- putStrLn(s"uniqueTracks: ${ tracks.length }")
+      _ <- putStrLn("Parsing source data into memory...")
+      tracks <- getUniqueTracks(params.sourcePath)
+      _ <- putStrLn(s"Got ${tracks.length} unique tracks")
+      _ <- putStrLn(s"Creating schema...")
       _ <- TrackRepositoryLayer.createSchema
-      _ <- ZIO.foreach_(tracks.grouped(10).toList)(TrackRepositoryLayer.insertSeq)
+      _ <- putStrLn(s"Inserting rows to database...")
+      barRef <- Ref.make(PercentageBar(0, tracks.length / 100, ProgressBarLayout("Importing data", 15, 60)))
+      _ <-  drawProgressBar(barRef.asInstanceOf[Ref[ProgressBar]]).repeat(Schedule.duration(250.millis)).forever.fork
+      _ <- ZIO.foreach_(tracks.grouped(100).toList)(batch =>
+          TrackRepositoryLayer.insertSeq(batch) *>
+          barRef.update(b => b.copy(current = b.current + 1)))
     } yield ()
   }
 
-  private def getUniqueTracks(dataPath : String): ZIO[Blocking, IOException, List[Track]] = {
+  private def getUniqueTracks(dataPath : Path): ZIO[Blocking, IOException, List[Track]] = {
      for {
-      lines <- Files.list(Path(dataPath))
+      lines <- Files.list(dataPath)
         .mapM(p => Files.readAllLines(p, StandardCharsets.UTF_8))
         .runCollect
         .map(chunk => chunk.toList.flatten)
@@ -87,29 +124,6 @@ object DataImport extends zio.App {
       Track(artist, title, rewritten.get, label, releaseDate, feed)
     else
       Track(artist, title, s"$artist - $title", None, None, None)
-  }
-
-  private def rewriteTrackName(parsedArtists : List[Artist], parsedTitle : Title) : String = {
-
-    def getAllNames(artist : Artist) : List[String] = artist match {
-      case Single(name) => List(name)
-      case Feat(a1, a2) => getAllNames(a1) ++ getAllNames(a2)
-      case Coop(a1, a2) => getAllNames(a1) ++ getAllNames(a2)
-      case Pres(a1, a2) => getAllNames(a1) ++ getAllNames(a2)
-    }
-
-    val artistNamesFromArtistFiled = parsedArtists.flatMap(a => getAllNames(a))
-
-    val featuredArtistNamesO = for {
-      aList <- parsedTitle.featuredArtist
-    } yield aList.flatMap(a => getAllNames(a))
-
-    val artistNames =
-      (artistNamesFromArtistFiled ++ featuredArtistNamesO.orElse(Some(List[String]())).get)
-        .distinct
-        .sorted
-
-    s"${artistNames.mkString(", ")} - ${parsedTitle.actualTitle}${parsedTitle.mix.map(" " + _).getOrElse("")}"
   }
 
 }

@@ -22,7 +22,7 @@ object ProgressBar {
 
   private def renderPercentageBar(bar : PercentageBar) : String = {
     val fraction = bar.current.toDouble / bar.total
-    val filledItemsCount = (fraction * bar.layout.barWidth).round.toInt
+    val filledItemsCount = (fraction.min(1) * bar.layout.barWidth).round.toInt
     val freeItemsCount = bar.layout.barWidth - filledItemsCount
 
     val barStr = "[" + "=" * filledItemsCount  + " " * freeItemsCount  + "]"

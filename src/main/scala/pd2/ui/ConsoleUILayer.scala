@@ -20,13 +20,13 @@ object ConsoleUILayer {
   val live: ZLayer[System, Throwable, Has[ConsoleUILayer.Service]] = {
     for {
       osOption <- system.property("os.name")
-      win = osOption.map(_.toLowerCase.contains("windows")).fold(false)(w => w)
+      win = osOption.map(_.toLowerCase.contains("windows")).fold(false)(identity)
       insideIntellij <- runningInsideIntellij
       _ <- setConsoleMode.when(win & !insideIntellij)
     } yield new ConsoleUILive(insideIntellij)
   }.toLayer
 
-  def setConsoleMode: Task[Unit] = ZIO.effect {
+  private def setConsoleMode: Task[Unit] = ZIO.effect {
     import Kernel32.{INSTANCE => k32}
     val currentModeRef = new IntByReference()
     val hConsole = k32.GetStdHandle(Wincon.STD_OUTPUT_HANDLE)
@@ -54,7 +54,7 @@ object ConsoleUILayer {
     }
   }
 
-  def runningInsideIntellij : ZIO[System, SecurityException, Boolean] = {
+  private def runningInsideIntellij : ZIO[System, SecurityException, Boolean] = {
     for {
       propOption <- system.env("intellij-terminal")
       ijMode = propOption.fold(false)(_ => true)

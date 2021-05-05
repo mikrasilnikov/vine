@@ -42,6 +42,11 @@ object ProgressBarSuite extends DefaultRunnableSpec {
           val bar = PercentageBar(100, 100, ProgressBarLayout("1234567", 6, 10))
           assert(ProgressBar.render(bar))(equalTo("123456 [==========] 100%"))
         },
+
+        test("146% completed") {
+          val bar = PercentageBar(146, 100, ProgressBarLayout("12345", 5, 10))
+          assert(ProgressBar.render(bar))(equalTo("12345 [==========] 146%"))
+        },
       ),
 
       suite("WorkItemsBar") (
