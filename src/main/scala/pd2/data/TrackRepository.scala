@@ -6,9 +6,11 @@ import zio.macros.accessible
 import slick.interop.zio.DatabaseProvider
 import slick.interop.zio.syntax._
 
+
+
 @accessible
-object TrackRepositoryLayer {
-  type TrackRepository = Has[TrackRepositoryLayer.Service]
+object TrackRepository {
+  type TrackRepository = Has[TrackRepository.Service]
 
   trait Service {
     def createSchema : IO[Throwable, Unit]
@@ -16,7 +18,7 @@ object TrackRepositoryLayer {
     def insertSeq(tracks : Iterable[Track]) : IO[Throwable, Option[Int]]
   }
 
-  val live : ZLayer[Has[DatabaseProvider], Throwable, Has[TrackRepositoryLayer.Service]] =
+  val live : ZLayer[Has[DatabaseProvider], Throwable, Has[TrackRepository.Service]] =
     ZLayer.fromServiceM((db:DatabaseProvider) =>
       db.profile.map { profile => new TrackRepositoryLive(db, profile) })
 }
