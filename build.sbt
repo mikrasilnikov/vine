@@ -19,8 +19,11 @@ libraryDependencies ++= Seq(
   "net.java.dev.jna" % "jna" % "5.8.0",
   "net.java.dev.jna" % "jna-platform" % "5.8.0",
   "io.argonaut" %% "argonaut" % "6.3.3",
-  "io.argonaut" %% "argonaut-monocle" % "6.3.3"
-
+  "io.argonaut" %% "argonaut-monocle" % "6.3.3",
+  "com.softwaremill.sttp.client3" %% "httpclient-backend-zio" % "3.3.1",
+  "io.circe" %% "circe-core" % "0.13.0",
+  "io.circe" %% "circe-generic" % "0.13.0",
+  "io.circe" %% "circe-parser" % "0.13.0"
 )
 
 scalacOptions += "-Ymacro-annotations"
