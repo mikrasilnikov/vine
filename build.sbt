@@ -20,7 +20,8 @@ libraryDependencies ++= Seq(
   "com.softwaremill.sttp.client3" %% "httpclient-backend-zio" % "3.3.1",
   "io.circe" %% "circe-core" % "0.13.0",
   "io.circe" %% "circe-generic" % "0.13.0",
-  "io.circe" %% "circe-parser" % "0.13.0"
+  "io.circe" %% "circe-parser" % "0.13.0",
+  "net.ruippeixotog" %% "scala-scraper" % "2.2.1"
 )
 
 scalacOptions += "-Ymacro-annotations"
