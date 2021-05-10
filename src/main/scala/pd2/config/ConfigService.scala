@@ -1,28 +1,25 @@
 package pd2.config
-import argonaut.Parse
 import zio.blocking.Blocking
-import zio.{Has, UIO, ZIO, ZLayer}
-import zio.nio.core.file._
-import zio.nio.file._
+import zio.{Has, ZIO, ZLayer}
 import zio.macros.accessible
-
+import zio.nio.core.file.Path
+import zio.nio.file.Files
+import io.circe.parser._
 import java.nio.charset.StandardCharsets
 
 @accessible
 object ConfigService {
-  type Config1 = Has[ConfigService.Service]
+  type Config = Has[ConfigService.Service]
 
   trait Service {
     val configuration : pd2.config.Config
   }
 
-  val live: ZLayer[Blocking, Exception, Has[Service]] = (for {
-    jsonString <- Files.readAllBytes(Path("config.json"))
-      .map(c => new String(c.toArray, StandardCharsets.UTF_8))
-    json <- ZIO.fromEither(Parse.parse(jsonString))
-      .mapError(s => new Exception(s))
-    config <- ZIO.fromEither(Config.ConfigCodec.decodeJson(json).result)
-      .mapError { case (s, _) => new Exception(s) }
-  } yield new Service { val configuration: Config = config })
-    .toLayer
+  val live: ZLayer[Blocking, Exception, Has[Service]] = {
+    for {
+      jsonString <- Files.readAllBytes(Path("config.json")).map(c => new String(c.toArray, StandardCharsets.UTF_8))
+      json <- ZIO.fromEither(parse(jsonString)).mapError(s => new Exception(s))
+      config <- ZIO.fromEither(json.as[pd2.config.Config])
+    } yield new Service { val configuration : pd2.config.Config = config }
+  }.toLayer
 }

@@ -1,14 +1,18 @@
 package pd2.config
 
-import argonaut._
-import Argonaut._
+import io.circe._
+import io.circe.generic.auto._
+import io.circe.parser._
 
 case class My(artistsFile: String, labelsFile: String)
 case class OnlyNew(dataPath: String, fileTemplate: String)
 case class NoShit(dataFiles : List[String])
 case class NoCompilations(maxTracksPerRelease: Int)
 case class NoEdits(minTrackDurationSeconds: Int)
-case class Feed(name: String, provider: String, urlTemplate: String, filters: List[String])
+
+sealed trait Feed
+case class BeatportFeed(name : String, urlTemplate : String, filters : List[String]) extends Feed
+case class TraxsourceFeed(name : String, urlTemplate : String, filters : List[String]) extends Feed
 
 case class Config(
    previewsFolder: String,
@@ -20,24 +24,35 @@ case class Config(
    feeds : List[Feed])
 
 object Config {
-  implicit def MyCodec : CodecJson[My] = casecodec2(My.apply, My.unapply)("artistsFile", "labelsFile")
-  implicit def OnlyNewCodec : CodecJson[OnlyNew] = casecodec2(OnlyNew.apply, OnlyNew.unapply)("dataPath", "fileTemplate")
-  implicit def NoShitCodec : CodecJson[NoShit] = casecodec1(NoShit.apply, NoShit.unapply)("dataFiles")
-  implicit def NoCompilationsCodec : CodecJson[NoCompilations] = casecodec1(NoCompilations.apply, NoCompilations.unapply)("maxTracksPerRelease")
-  implicit def NoEditsCodec : CodecJson[NoEdits] = casecodec1(NoEdits.apply, NoEdits.unapply)("minTrackDurationSeconds")
-  implicit def FeedCodec : CodecJson[Feed] = casecodec4(Feed.apply, Feed.unapply)("name", "provider", "urlTemplate", "filters")
 
-  implicit def ConfigCodec: DecodeJson[Config] = DecodeJson {
-    c => for {
-      previewsFolder  <- (c --\ "previewsFolder").as[String]
-      my              <- (c --\ "filters" --\ "my").as[My]
-      onlyNew         <- (c --\ "filters" --\ "onlyNew").as[OnlyNew]
-      noShit          <- (c --\ "filters" --\ "noShit").as[NoShit]
-      noCompilations  <- (c --\ "filters" --\ "noCompilations").as[NoCompilations]
-      noEdits         <- (c --\ "filters" --\ "noEdits").as[NoEdits]
-      feeds           <- (c --\ "feeds").as[List[Feed]]
-    } yield Config(previewsFolder, my, onlyNew, noShit, noCompilations, noEdits, feeds)
+  implicit val feedDecoder: Decoder[Feed] = new Decoder[Feed] {
+    final def apply(c: HCursor): Decoder.Result[Feed] =
+      for {
+        name <- c.downField("name").as[String]
+        provider <- c.downField("provider").as[String]
+        urlTemplate <- c.downField("urlTemplate").as[String]
+        filters <- c.downField("filters").as[List[String]]
+      } yield {
+        provider match {
+          case "beatport" => BeatportFeed(name, urlTemplate, filters)
+          case "traxsource" => TraxsourceFeed(name, urlTemplate, filters)
+        }
+      }
   }
+
+  implicit val configDecoder: Decoder[Config] = new Decoder[Config] {
+    final def apply(c: HCursor): Decoder.Result[Config] =
+      for {
+        previewsFolder <- c.downField("previewsFolder").as[String]
+        my <- c.downField("filters").downField("my").as[My]
+        onlyNew <- c.downField("filters").downField("onlyNew").as[OnlyNew]
+        noShit <- c.downField("filters").downField("noShit").as[NoShit]
+        noCompilations <- c.downField("filters").downField("noCompilations").as[NoCompilations]
+        noEdits <- c.downField("filters").downField("noEdits").as[NoEdits]
+        feeds <- c.downField("feeds").as[List[Feed]]
+      } yield {
+        Config(previewsFolder, my, onlyNew, noShit, noCompilations, noEdits, feeds)
+      }
+  }
+
 }
-
-
