@@ -21,7 +21,8 @@ libraryDependencies ++= Seq(
   "io.circe" %% "circe-core" % "0.13.0",
   "io.circe" %% "circe-generic" % "0.13.0",
   "io.circe" %% "circe-parser" % "0.13.0",
-  "net.ruippeixotog" %% "scala-scraper" % "2.2.1"
+  "net.ruippeixotog" %% "scala-scraper" % "2.2.1",
+  "org.scala-lang.modules" %% "scala-xml" % "1.3.0"
 )
 
 scalacOptions += "-Ymacro-annotations"

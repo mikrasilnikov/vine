@@ -7,9 +7,10 @@ import net.ruippeixotog.scalascraper.dsl.DSL.Extract._
 import net.ruippeixotog.scalascraper.dsl.DSL.Parse._
 import pd2.config.TraxsourceFeed
 import sttp.client3
+import sttp.client3.httpclient.zio.send
 import sttp.client3.{RequestT, asString, basicRequest}
 import sttp.model.{HeaderNames, Uri}
-import zio.Task
+import zio.{Schedule, Task, ZIO}
 
 import java.time.LocalDate
 
@@ -27,7 +28,11 @@ object TraxsourceDataProvider {
     .header(HeaderNames.UserAgent,"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.61 Safari/537.36")
 
   implicit val provider: WebDataProvider[TraxsourceFeed] = new WebDataProvider[TraxsourceFeed] {
-    override def processTracks(feed: TraxsourceFeed, processAction: TrackDto => Task[Unit]): Unit = ???
+    override def processTracks(feed: TraxsourceFeed, dateFrom : LocalDate, dateTo : LocalDate, processAction: TrackDto => Task[Unit]) = {
+
+      ???
+
+    }
   }
 
   private[web] def buildTraxsourcePageRequest(
@@ -53,6 +58,13 @@ object TraxsourceDataProvider {
       traxsourceBasicRequest
         .get(uri)
         .response(asString)
+  }
+
+  private def makeTraxsourcePageRequest(request : SttpRequest) = {
+    for {
+      response <- send(request)
+        .flatMap(response => ZIO.fromEither(response.body))
+    } yield ???
   }
 
   private[web] def parseTraxsourcePage(doc : Document) : Either[String, TraxsourcePage] =
