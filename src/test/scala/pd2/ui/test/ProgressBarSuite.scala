@@ -5,8 +5,6 @@ import zio.test.Assertion._
 import pd2.ui.{Completed, Failed, InProgress, ItemState, Pending, PercentageBar, ProgressBar, ProgressBarLayout, WorkItemsBar}
 import zio.test.DefaultRunnableSpec
 
-import scala.collection.immutable.SortedMap
-
 object ProgressBarSuite extends DefaultRunnableSpec {
   def spec = {
     suite ("ProgressBar Suite") (
