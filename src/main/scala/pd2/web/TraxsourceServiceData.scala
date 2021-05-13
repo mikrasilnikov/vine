@@ -1,6 +1,6 @@
 package pd2.web
 
-import io.circe.{Decoder, HCursor}
+import io.circe.{CursorOp, Decoder, HCursor}
 
 import java.time.LocalDate
 import scala.util.{Failure, Success, Try}
@@ -8,10 +8,10 @@ import io.circe
 
 object TraxsourceServiceData {
 
-  case class TraxsourceServiceArtist(id: Int, tag: Int, name: String, webName : String)
-  case class TraxsourceServiceLabel(id : Int, name : String, webName : String)
+  final case class TraxsourceServiceArtist(id: Int, tag: Int, name: String, webName : String)
+  final case class TraxsourceServiceLabel(id : Int, name : String, webName : String)
 
-  case class TraxsourceServiceTrack(
+  final case class TraxsourceServiceTrack(
     trackId : Int,
     artists : List[TraxsourceServiceArtist],
     title : String,
@@ -37,11 +37,15 @@ object TraxsourceServiceData {
     tryJson match {
       case Failure(exception) => Left(ParseFailure("Malformed traxsource service response", serviceResponse, Some(exception)))
       case Success(jsonString) =>
+        // В ответе сервиса на Traxsource возвращается не просто json внутри xml, но сам json еще и не соответствует
+        // спецификации. У него отстутсвуют кавычки у имен полей.
+        val fixedJson = jsonString.replaceAll("(\\w+):\\s", "\"$1\": ")
+        circe.DecodingFailure
         for {
-          json <- circe.parser.parse(jsonString)
-            .left.map(pf => ParseFailure(pf.message, jsonString, None))
+          json <- circe.parser.parse(fixedJson)
+            .left.map(pf => ParseFailure(pf.message, fixedJson, None))
           tracks <- json.as[List[TraxsourceServiceTrack]]
-            .left.map(dr => ParseFailure(dr.message, jsonString, None))
+            .left.map(dr => ParseFailure(dr.message ++ CursorOp.opsToPath(dr.history), fixedJson, None))
         } yield tracks
     }
   }
@@ -49,19 +53,19 @@ object TraxsourceServiceData {
   implicit val traxsourceServiceArtistDecoder: Decoder[TraxsourceServiceArtist] = new Decoder[TraxsourceServiceArtist]{
     override def apply(c: HCursor): Decoder.Result[TraxsourceServiceArtist] =
       for {
-        id <- c.downArray.downN(0).as[Int]
-        tag <- c.downArray.downN(1).as[Int]
-        name <- c.downArray.downN(2).as[String]
-        webName <- c.downArray.downN(3).as[String]
+        id <- c.downN(0).as[Int]
+        tag <- c.downN(1).as[Int]
+        name <- c.downN(2).as[String]
+        webName <- c.downN(3).as[String]
       } yield TraxsourceServiceArtist(id, tag, name, webName)
   }
 
   implicit val traxsourceServiceLabelDecoder: Decoder[TraxsourceServiceLabel] = new Decoder[TraxsourceServiceLabel] {
     override def apply(c: HCursor) : Decoder.Result[TraxsourceServiceLabel] =
       for {
-        id <- c.downArray.downN(0).as[Int]
-        name <- c.downArray.downN(1).as[String]
-        webName <- c.downArray.downN(2).as[String]
+        id <- c.downN(0).as[Int]
+        name <- c.downN(1).as[String]
+        webName <- c.downN(2).as[String]
       } yield TraxsourceServiceLabel(id, name, webName)
   }
 

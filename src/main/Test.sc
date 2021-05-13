@@ -1,4 +1,5 @@
 import java.time.LocalDate
 
-val date1 = LocalDate.of(2021, 5, 2)
-date1.toString
+val regex = "(\\w+):\\s"
+
+"track_id: \"8803989\",".replaceAll(regex, " \"$1\": ")
