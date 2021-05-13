@@ -5,37 +5,38 @@ import io.circe.{CursorOp, Decoder, HCursor}
 import java.time.LocalDate
 import scala.util.{Failure, Success, Try}
 import io.circe
+import pd2.web.TraxsourceServiceTrack.{TraxsourceServiceArtist, TraxsourceServiceLabel}
 
-object TraxsourceServiceData {
+final case class TraxsourceServiceTrack(
+  trackId : Int,
+  artists : List[TraxsourceServiceArtist],
+  title : String,
+  titleUrl : String,
+  trackUrl : String,
+  label : TraxsourceServiceLabel,
+  genre : String,
+  catNumber : String,
+  durationSeconds : Int,
+  releaseDate : LocalDate,
+  imageUrl : String,
+  mp3Url : String,
+  keySig : String
+)
+
+object TraxsourceServiceTrack {
 
   final case class TraxsourceServiceArtist(id: Int, tag: Int, name: String, webName : String)
   final case class TraxsourceServiceLabel(id : Int, name : String, webName : String)
 
-  final case class TraxsourceServiceTrack(
-    trackId : Int,
-    artists : List[TraxsourceServiceArtist],
-    title : String,
-    titleUrl : String,
-    trackUrl : String,
-    label : TraxsourceServiceLabel,
-    genre : String,
-    catNumber : String,
-    durationSeconds : Int,
-    releaseDate : LocalDate,
-    imageUrl : String,
-    mp3Url : String,
-    keySig : String
-  )
-
-  def decodeTraxsourceServiceData(serviceResponse : String) : Either[ParseFailure, List[TraxsourceServiceTrack]] =
+  private[web] def fromServiceResponse(response: String) : Either[ParseFailure, List[TraxsourceServiceTrack]] =
   {
     val tryJson = for {
-      xml <- Try { scala.xml.XML.loadString(serviceResponse) }
+      xml <- Try { scala.xml.XML.loadString(response) }
       innerJson <- Try { (xml \ "data").head.text }
     } yield innerJson
 
     tryJson match {
-      case Failure(exception) => Left(ParseFailure("Malformed traxsource service response", serviceResponse, Some(exception)))
+      case Failure(exception) => Left(ParseFailure("Malformed traxsource service response", response, Some(exception)))
       case Success(jsonString) =>
         // В ответе сервиса на Traxsource возвращается не просто json внутри xml, но сам json еще и не соответствует
         // спецификации. У него отстутсвуют кавычки у имен полей.

@@ -1,17 +1,15 @@
 package pd2.web.test
 
-import pd2.web.{TraxsourceDataProvider, TraxsourceServiceData}
-import pd2.web.TraxsourceDataProvider.{Present, TraxsourcePage}
-import pd2.web.TraxsourceServiceData.{TraxsourceServiceArtist, TraxsourceServiceLabel, TraxsourceServiceTrack}
-import pd2.web.test.TraxsourceDataProviderSuite.{suite, testM}
+import pd2.web.TraxsourceServiceTrack
+import pd2.web.TraxsourceServiceTrack.{TraxsourceServiceArtist, TraxsourceServiceLabel}
 import zio.ZIO
 import zio.console.putStrLn
-import zio.test.Assertion.{anything, equalTo}
-import zio.test.{DefaultRunnableSpec, ZSpec, assert}
+import zio.test.Assertion.equalTo
+import zio.test.{DefaultRunnableSpec, assert}
 
 import java.time.LocalDate
 
-object TraxsourceServiceDataSuite extends DefaultRunnableSpec with ManagedTestResources {
+object TraxsourceServiceTrackSuite extends DefaultRunnableSpec with ManagedTestResources {
   override def spec =
     suite("TraxsourceDataProviderSuite")(
 
@@ -35,7 +33,8 @@ object TraxsourceServiceDataSuite extends DefaultRunnableSpec with ManagedTestRe
           )
 
           loadTextFileManaged("/Traxsource_ServiceResponse.xml")
-            .use { doc => ZIO.fromEither(TraxsourceServiceData.decodeTraxsourceServiceData(doc)).tapError(e => putStrLn(s"${e.msg}\n${e.parserInput}")) }
+            .use { doc => ZIO.fromEither(TraxsourceServiceTrack.fromServiceResponse(doc))
+              .tapError(e => putStrLn(s"${e.msg}\n${e.parserInput}")) }
             .map(res => assert(res)(equalTo(List(expected))))
         }
       )
