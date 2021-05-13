@@ -5,7 +5,7 @@ import zio.console._
 import zio.system._
 import zio.{Ref, UIO, ZIO, system}
 
-class ConsoleUILive(runningInsideIntellij : Boolean) extends ConsoleUILayer.Service {
+class ConsoleUILive(runningInsideIntellij : Boolean) extends ConsoleUIService.Service {
 
   object ConsoleASCII {
 
@@ -73,4 +73,8 @@ class ConsoleUILive(runningInsideIntellij : Boolean) extends ConsoleUILayer.Serv
               putStr("\b" * 100) *> putStr(render)
     } yield ()
   }
+
+  override def aquireProgressItem(batchName: String): ZIO[Any, Nothing, ConsoleUIService.ProgressItemRef] = ???
+
+  override def updateProgressItem(item: ConsoleUIService.ProgressItemRef, state: ProgressBar.ItemState): ZIO[Any, Nothing, Unit] = ???
 }

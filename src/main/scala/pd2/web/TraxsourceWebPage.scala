@@ -18,22 +18,22 @@ object TraxsourceWebPage {
   case object Absent extends TraxsourcePager
   final case class Present(currentPage : Int, lastPage : Int) extends TraxsourcePager
 
-  private[web] def parse(html : String) : Either[ParseFailure, TraxsourceWebPage] =
+  private[web] def parse(html : String) : Either[UnexpectedServiceResponse, TraxsourceWebPage] =
   {
     val tryDoc = Try { browser.parseString(html) }
 
     tryDoc match {
-      case Failure(exception) => Left(ParseFailure(exception.getMessage, html, Some(exception)))
+      case Failure(exception) => Left(UnexpectedServiceResponse(exception.getMessage, html, Some(exception)))
       case Success(doc) => readDocument(html, doc)
     }
   }
 
-  private[web] def readDocument(html : String, doc : Document) : Either[ParseFailure, TraxsourceWebPage] =
+  private[web] def readDocument(html : String, doc : Document) : Either[UnexpectedServiceResponse, TraxsourceWebPage] =
   {
     val trackListDiv = doc >?> element("div.trk-list-cont")
 
     val pagerEither = trackListDiv match {
-      case None => Left(ParseFailure("Could not find element div.trk-list-cont", html, None))
+      case None => Left(UnexpectedServiceResponse("Could not find element div.trk-list-cont", html, None))
       case Some(div) =>
         val pageAnchors = div >?> element("div.list-pager") >?> element("div.page-nums")
         pageAnchors.flatten match {

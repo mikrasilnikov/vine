@@ -34,7 +34,7 @@ object TraxsourceServiceTrackSuite extends DefaultRunnableSpec with ManagedTestR
 
           loadTextFileManaged("/Traxsource_ServiceResponse.xml")
             .use { doc => ZIO.fromEither(TraxsourceServiceTrack.fromServiceResponse(doc))
-              .tapError(e => putStrLn(s"${e.msg}\n${e.parserInput}")) }
+              .tapError(e => putStrLn(e.toString)) }
             .map(res => assert(res)(equalTo(List(expected))))
         }
       )

@@ -1,8 +1,9 @@
 package pd2.ui.test
 
+import pd2.ui.ProgressBar.{Completed, Failed, InProgress, ItemState, Pending, ProgressBarLayout}
 import zio.test._
 import zio.test.Assertion._
-import pd2.ui.{Completed, Failed, InProgress, ItemState, Pending, PercentageBar, ProgressBar, ProgressBarLayout, WorkItemsBar}
+import pd2.ui.{PercentageBar, ProgressBar, WorkItemsBar}
 import zio.test.DefaultRunnableSpec
 
 object ProgressBarSuite extends DefaultRunnableSpec {

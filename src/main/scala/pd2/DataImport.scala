@@ -4,7 +4,8 @@ import com.typesafe.config._
 import pd2.data.TrackParsing._
 import pd2.data.TrackTable.Track
 import pd2.data.{TrackParsing, TrackRepository}
-import pd2.ui.{ConsoleUILayer, PercentageBar, ProgressBar, ProgressBarLayout}
+import pd2.ui.ProgressBar.ProgressBarLayout
+import pd2.ui.{ConsoleUIService, PercentageBar, ProgressBar}
 import slick.interop.zio.DatabaseProvider
 import slick.jdbc.JdbcProfile
 import zio._
@@ -13,6 +14,7 @@ import zio.console.putStrLn
 import zio.duration.durationInt
 import zio.nio.core.file._
 import zio.nio.file._
+
 import java.io.IOException
 import java.nio.charset.StandardCharsets
 import java.time._
@@ -44,7 +46,7 @@ object DataImport extends zio.App {
   def run(args: List[String]) = {
 
     def customLayer(params : Params) =
-      (createDbLayer(params.outputPath) >>> TrackRepository.live) ++ ConsoleUILayer.live
+      (createDbLayer(params.outputPath) >>> TrackRepository.live) ++ ConsoleUIService.live
 
     val app = parseAndValidateParams(args)
       .foldM (
@@ -70,7 +72,7 @@ object DataImport extends zio.App {
   }
 
   private def performImport(params : Params) = {
-    import pd2.ui.ConsoleUILayer._
+    import pd2.ui.ConsoleUIService._
 
     val batchSize = 100
     for {

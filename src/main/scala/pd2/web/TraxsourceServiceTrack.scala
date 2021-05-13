@@ -21,14 +21,16 @@ final case class TraxsourceServiceTrack(
   imageUrl : String,
   mp3Url : String,
   keySig : String
-)
+) {
+  def toTrackDto : TrackDto = ???
+}
 
 object TraxsourceServiceTrack {
 
   final case class TraxsourceServiceArtist(id: Int, tag: Int, name: String, webName : String)
   final case class TraxsourceServiceLabel(id : Int, name : String, webName : String)
 
-  private[web] def fromServiceResponse(response: String) : Either[ParseFailure, List[TraxsourceServiceTrack]] =
+  private[web] def fromServiceResponse(response: String) : Either[Pd2Exception, List[TraxsourceServiceTrack]] =
   {
     val tryJson = for {
       xml <- Try { scala.xml.XML.loadString(response) }
@@ -36,7 +38,7 @@ object TraxsourceServiceTrack {
     } yield innerJson
 
     tryJson match {
-      case Failure(exception) => Left(ParseFailure("Malformed traxsource service response", response, Some(exception)))
+      case Failure(exception) => Left(UnexpectedServiceResponse("Malformed traxsource service response", response, Some(exception)))
       case Success(jsonString) =>
         // В ответе сервиса на Traxsource возвращается не просто json внутри xml, но сам json еще и не соответствует
         // спецификации. У него отстутсвуют кавычки у имен полей.
@@ -44,9 +46,9 @@ object TraxsourceServiceTrack {
         circe.DecodingFailure
         for {
           json <- circe.parser.parse(fixedJson)
-            .left.map(pf => ParseFailure(pf.message, fixedJson, None))
+            .left.map(pf => UnexpectedServiceResponse(pf.message, fixedJson, None))
           tracks <- json.as[List[TraxsourceServiceTrack]]
-            .left.map(dr => ParseFailure(dr.message ++ CursorOp.opsToPath(dr.history), fixedJson, None))
+            .left.map(dr => UnexpectedServiceResponse(dr.message ++ CursorOp.opsToPath(dr.history), fixedJson, None))
         } yield tracks
     }
   }
