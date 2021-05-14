@@ -22,7 +22,16 @@ object ConsoleUIService {
 
     def completeProgressItem(item : ProgressItemRef): ZIO[Any, Nothing, Unit] = updateProgressItem(item, ProgressBar.Completed)
 
-    def failProgressItem(item : ProgressItemRef): ZIO[Any, Nothing, Unit] = updateProgressItem(item, ProgressBar.Failed)
+    def failProgressItem(item : ProgressItemRef): ZIO[Any, Nothing, Unit] = updateProgressItem(item, ProgressBar.Completed)
+
+    def withProgressReporting[R, E, A](batchName : String)(effect : ZIO[R, E, A]): ZIO[R, E, A] = {
+      for {
+        item    <- aquireProgressItem(batchName)
+        _       <- updateProgressItem(item, ProgressBar.InProgress)
+        result  <- effect.tapError(_ => failProgressItem(item))
+        _       <- completeProgressItem(item)
+      } yield result
+    }
   }
 
   val live: ZLayer[System, Throwable, Has[ConsoleUIService.Service]] = {
@@ -68,4 +77,6 @@ object ConsoleUIService {
       ijMode = propOption.fold(false)(_ => true)
     } yield ijMode
   }
+
+
 }
