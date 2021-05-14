@@ -13,7 +13,8 @@ object ConsoleUIService {
 
   trait ProgressItemRef
 
-  trait Service {
+  trait Service
+  {
     def drawProgressBar(barRef : Ref[ProgressBar]) : ZIO[Console, Nothing, Unit]
 
     def aquireProgressItem(batchName: String) : ZIO[Any, Nothing, ProgressItemRef]

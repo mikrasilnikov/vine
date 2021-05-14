@@ -1,18 +1,15 @@
 package pd2.web
 
 import pd2.config.TraxsourceFeed
+import pd2.helpers.Conversions._
+import pd2.ui.ConsoleUIService.ConsoleUI
+import pd2.ui.ProgressOps._
 import sttp.client3
 import sttp.client3.httpclient.zio.{SttpClient, send}
 import sttp.client3.{RequestT, asString, basicRequest}
 import sttp.model.{HeaderNames, Uri}
-import zio.{Has, IO, Promise, Schedule, Task, ZIO}
-import pd2.ui.{ConsoleUIService, ProgressBar}
-import pd2.ui.ConsoleUIService.ConsoleUI
-
+import zio.{Promise, ZIO}
 import java.time.LocalDate
-import pd2.ui.ProgressOps._
-import pd2.helpers.Conversions._
-import pd2.web.TraxsourceWebPage.{Absent, Present}
 
 object TraxsourceDataProvider {
 
@@ -34,10 +31,7 @@ object TraxsourceDataProvider {
         fiber     <- processTracklistPage(feed, dateFrom, dateTo, processAction, 1, Some(promise))
                       .withProgressReporting(feed.name).fork
         fstPage   <- promise.await
-        remaining =  fstPage.pager match {
-                      case Absent => Nil
-                      case Present(_, lastPage) => (2 to lastPage).toList
-                    }
+        remaining =  fstPage.getRemainingPages
         _         <- ZIO.foreachPar_(remaining) { i =>
                       processTracklistPage(feed, dateFrom, dateTo, processAction, i, None)
                         .withProgressReporting(feed.name) }

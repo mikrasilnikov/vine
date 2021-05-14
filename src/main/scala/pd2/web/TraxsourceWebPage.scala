@@ -4,11 +4,17 @@ import net.ruippeixotog.scalascraper.browser.JsoupBrowser
 import net.ruippeixotog.scalascraper.dsl.DSL._
 import net.ruippeixotog.scalascraper.model.Document
 import net.ruippeixotog.scalascraper.scraper.ContentExtractors.{attr, attrs, element, elements}
-import pd2.web.TraxsourceWebPage.TraxsourcePager
+import pd2.web.TraxsourceWebPage.{Absent, Present, TraxsourcePager}
+
 import scala.util.{Failure, Success, Try}
 
 
-final case class TraxsourceWebPage(pager : TraxsourcePager, trackIds : List[Int])
+final case class TraxsourceWebPage(pager : TraxsourcePager, trackIds : List[Int]) {
+  def getRemainingPages: List[Int] = pager match {
+    case Absent => Nil
+    case Present(current, last) => (current + 1 to last).toList
+  }
+}
 
 object TraxsourceWebPage {
 
