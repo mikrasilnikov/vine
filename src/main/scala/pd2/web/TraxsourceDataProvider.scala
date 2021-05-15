@@ -26,7 +26,6 @@ object TraxsourceDataProvider {
       dateFrom    : LocalDate,
       dateTo      : LocalDate,
       processTrack: TrackDto => ZIO[Any, Pd2Exception, Unit])
-      (implicit defaultDimensions : ProgressBarDimensions)
     : ZIO[SttpClient with ConsoleProgress, Pd2Exception, Unit] =
     {
       for {

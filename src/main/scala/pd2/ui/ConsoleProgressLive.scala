@@ -1,18 +1,20 @@
 package pd2.ui
 import com.sun.jna.platform.win32.{Kernel32, WinBase, Wincon}
 import com.sun.jna.ptr.{IntByReference, PointerByReference}
+import pd2.ui.ConsoleProgressLive.DrawState
 import pd2.ui.ConsoleProgressService.{ConsoleProgress, ProgressItem, Service}
 import pd2.ui.ProgressBar.{ItemState, Pending, ProgressBarDimensions, ProgressBarLayout}
 import zio.console._
 import zio.system.System
-import zio.{RefM, Task, ZIO, ZLayer, system}
+import zio.{Ref, RefM, Task, ZIO, ZLayer, system}
 
 import scala.collection.mutable.ArrayBuffer
 
 final case class ConsoleProgressLive(
-  progressBarsRef      : RefM[ArrayBuffer[ProgressBar]],
-  defaultDimensions    : ProgressBarDimensions,
-  runningInsideIntellij: Boolean)
+  progressBarsRef       : RefM[ArrayBuffer[ProgressBar]],
+  drawState             : Ref[DrawState],
+  defaultDimensions     : ProgressBarDimensions,
+  runningInsideIntellij : Boolean)
   extends ConsoleProgressService.Service {
 
   def updateProgressItem(item : ProgressItem, state: ItemState): ZIO[Any, Nothing, Unit] =
@@ -51,7 +53,16 @@ final case class ConsoleProgressLive(
     acquireProgressItems(batchName, 1).map(_.head)
 
   def drawProgress: ZIO[Console, Nothing, Unit] = {
-    ???
+    for {
+      state <- drawState.get
+      _     <- putStr(ConsoleASCII.Positioning.up(state.lastNumBarsDrawn))
+      _     <- progressBarsRef.modify { bars =>
+                for {
+                  _ <- ZIO.foreach_(bars)(bar => drawProgressBar(bar))
+                  _ <- drawState.modify(_ => ((), DrawState(bars.length)))
+                } yield ((), bars)
+              }
+    } yield ()
   }
 
   private def drawProgressBar(bar: ProgressBar): ZIO[Console, Nothing, Unit] = {
@@ -68,6 +79,8 @@ final case class ConsoleProgressLive(
 
 object ConsoleProgressLive {
 
+  case class DrawState(lastNumBarsDrawn : Int)
+
   def make(progressBarDimensions : ProgressBarDimensions): ZLayer[System, Throwable, ConsoleProgress] =
     {
       for {
@@ -75,8 +88,9 @@ object ConsoleProgressLive {
         win             =  osOption.map(_.toLowerCase.contains("windows")).fold(false)(_ => true)
         insideIntellij  <- runningInsideIntellij
         _               <- enableWindowsTerminalProcessing.when(win & !insideIntellij)
-        state           <- RefM.make(ArrayBuffer.empty[ProgressBar])
-      } yield ConsoleProgressLive(state, progressBarDimensions, insideIntellij)
+        bars            <- RefM.make(ArrayBuffer.empty[ProgressBar])
+        drawState       <- Ref.make(DrawState(0))
+      } yield ConsoleProgressLive(bars, drawState, progressBarDimensions, insideIntellij)
   }.toLayer
 
   private def enableWindowsTerminalProcessing: Task[Unit] = ZIO.effect {

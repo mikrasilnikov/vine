@@ -14,6 +14,5 @@ trait WebDataProvider[F <: Feed] {
       dateFrom : LocalDate,
       dateTo : LocalDate,
       processAction: TrackDto => ZIO[Any, Pd2Exception, Unit])
-      (implicit defaultDimensions : ProgressBarDimensions)
     : ZIO[SttpClient with ConsoleProgress, Pd2Exception, Unit]
 }
