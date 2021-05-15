@@ -2,22 +2,25 @@ package pd2
 
 import com.typesafe.config._
 import pd2.data.TrackParsing._
+import pd2.data.TrackRepository.TrackRepository
 import pd2.data.TrackTable.Track
 import pd2.data.{TrackParsing, TrackRepository}
-import pd2.ui.ProgressBar.{ProgressBarDimensions, ProgressBarLayout}
-import pd2.ui.{ConsoleProgressLive, ConsoleProgressService, ProgressBar}
+import pd2.ui.ConsoleProgressService.ConsoleProgress
+import pd2.ui.ProgressBar.{InProgress, ProgressBarDimensions, ProgressBarLayout}
+import pd2.ui.{ConsoleASCII, ConsoleProgressLive, ConsoleProgressService => Progress}
 import slick.interop.zio.DatabaseProvider
 import slick.jdbc.JdbcProfile
 import zio._
 import zio.blocking.Blocking
-import zio.console.putStrLn
+import zio.clock.Clock
+import zio.console.{Console, putStrLn}
 import zio.duration.durationInt
 import zio.nio.core.file._
 import zio.nio.file._
 
 import java.io.IOException
 import java.nio.charset.StandardCharsets
-import java.time._
+import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
 object DataImport extends zio.App {
@@ -51,7 +54,7 @@ object DataImport extends zio.App {
 
     val app = parseAndValidateParams(args)
       .foldM (
-        e => putStrLn(e.getMessage) *> putStrLn("") *> printUsage,
+        e => putStrLn(ConsoleASCII.Color.red + e.getMessage + ConsoleASCII.Color.white) *> putStrLn("") *> printUsage,
         params => performImport(params).provideCustomLayer(customLayer(params)))
 
     app.exitCode
@@ -72,8 +75,9 @@ object DataImport extends zio.App {
     (dbConfig ++ dbProfile) >>> DatabaseProvider.live
   }
 
-  private def performImport(params : Params) = {
-    import pd2.ui.ConsoleProgressService.Service
+  private def performImport(params : Params)
+    : ZIO[Console with TrackRepository with ConsoleProgress with Blocking with Clock, Throwable, Unit] =
+  {
     val batchSize = 100
     for {
       _ <- putStrLn("Parsing source data into memory...")
@@ -82,11 +86,15 @@ object DataImport extends zio.App {
       _ <- putStrLn(s"Creating schema...")
       _ <- TrackRepository.createSchema
       _ <- putStrLn(s"Inserting rows to database...")
-      barRef <- Ref.make(PercentageBar(0, tracks.length, ProgressBarLayout("Importing data", ProgressBarDimensions(15, 60))))
-      _ <-  drawProgressBar(barRef.asInstanceOf[Ref[ProgressBar]]).repeat(Schedule.duration(250.millis)).forever.fork
-      _ <- ZIO.foreach_(tracks.grouped(batchSize).toList)(batch =>
-          TrackRepository.insertSeq(batch) *>
-          barRef.update(b => b.copy(current = b.current + batchSize)))
+
+      prgItems  <- Progress.acquireProgressItems("Importing data", tracks.length / batchSize)
+      _         <- Progress.drawProgress.repeat(Schedule.duration(333.millis)).forever.fork
+      _         <- ZIO.foreach_(tracks.grouped(batchSize).zip(prgItems).toList) {
+                  case (batch, pItem) =>
+                    Progress.updateProgressItem(pItem, InProgress) *>
+                    TrackRepository.insertSeq(batch) *>
+                    Progress.completeProgressItem(pItem)
+                }
     } yield ()
   }
 

@@ -17,7 +17,7 @@ object ProgressBar {
   case object Completed   extends ItemState
   case object Failed      extends ItemState
 
-  def render(bar : ProgressBar, tick : Int = 0) : String = {
+  def render(bar : ProgressBar, tick : Long = 0) : String = {
 
     val itemsPerBarCell = bar.workItems.length.toDouble / bar.layout.dimensions.barWidth
 
@@ -34,13 +34,14 @@ object ProgressBar {
       }
       .map { items =>
         val cellState = {
-          def allPending = items.forall(state => state == Pending)
-          def someInProgress = items.contains(InProgress)
-          def allCompleted = items.forall ( state => state == Completed )
+          val somePending = items.contains(Pending)
+          val someCompleted = items.contains(Completed)
+          val someInProgress = items.contains(InProgress)
+          val allCompleted = items.forall(state => state == Completed)
 
-          if (allPending) Pending
+          if (allCompleted) Completed
           else if (someInProgress) InProgress
-          else if (allCompleted) Completed
+          else if (somePending) Pending
           else Failed
         }
         cellState
@@ -69,7 +70,7 @@ object ProgressBar {
     s"${effectiveLabel(bar.layout)} $barStr $percentStr"
   }
 
-  private def tickSymbol(tick : Int) : Char =
+  private def tickSymbol(tick : Long) : Char =
     tick % 4 match {
       case 0 => '|'
       case 1 => '/'

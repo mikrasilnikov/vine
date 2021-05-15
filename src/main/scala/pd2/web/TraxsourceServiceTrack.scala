@@ -5,6 +5,7 @@ import io.circe.{CursorOp, Decoder, HCursor}
 import java.time.LocalDate
 import scala.util.{Failure, Success, Try}
 import io.circe
+import pd2.web.Pd2Exception.UnexpectedServiceResponse
 import pd2.web.TraxsourceServiceTrack.{TraxsourceServiceArtist, TraxsourceServiceLabel}
 
 final case class TraxsourceServiceTrack(
@@ -43,7 +44,6 @@ object TraxsourceServiceTrack {
         // В ответе сервиса на Traxsource возвращается не просто json внутри xml, но сам json еще и не соответствует
         // спецификации. У него отстутсвуют кавычки у имен полей.
         val fixedJson = jsonString.replaceAll("(\\w+):\\s", "\"$1\": ")
-        circe.DecodingFailure
         for {
           json <- circe.parser.parse(fixedJson)
             .left.map(pf => UnexpectedServiceResponse(pf.message, fixedJson, None))

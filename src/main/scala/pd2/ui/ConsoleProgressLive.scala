@@ -4,10 +4,13 @@ import com.sun.jna.ptr.{IntByReference, PointerByReference}
 import pd2.ui.ConsoleProgressLive.DrawState
 import pd2.ui.ConsoleProgressService.{ConsoleProgress, ProgressItem, Service}
 import pd2.ui.ProgressBar.{ItemState, Pending, ProgressBarDimensions, ProgressBarLayout}
+import slick.jdbc.meta.MBestRowIdentifierColumn.Scope.Temporary
 import zio.console._
 import zio.system.System
 import zio.{Ref, RefM, Task, ZIO, ZLayer, system}
 
+import java.time.LocalTime
+import java.time.temporal.TemporalUnit
 import scala.collection.mutable.ArrayBuffer
 
 final case class ConsoleProgressLive(
@@ -53,24 +56,27 @@ final case class ConsoleProgressLive(
     acquireProgressItems(batchName, 1).map(_.head)
 
   def drawProgress: ZIO[Console, Nothing, Unit] = {
+    import java.time.temporal.ChronoUnit
     for {
       state <- drawState.get
+      now   <- ZIO.effectTotal(LocalTime.now())
+      tick  =  state.startTime.until(now, ChronoUnit.MILLIS) / 333
       _     <- putStr(ConsoleASCII.Positioning.up(state.lastNumBarsDrawn))
       _     <- progressBarsRef.modify { bars =>
                 for {
-                  _ <- ZIO.foreach_(bars)(bar => drawProgressBar(bar))
-                  _ <- drawState.modify(_ => ((), DrawState(bars.length)))
+                  _ <- ZIO.foreach_(bars)(bar => drawProgressBar(bar, tick))
+                  _ <- drawState.modify(s => ((), s.copy(lastNumBarsDrawn = bars.length)))
                 } yield ((), bars)
               }
     } yield ()
   }
 
-  private def drawProgressBar(bar: ProgressBar): ZIO[Console, Nothing, Unit] = {
+  private def drawProgressBar(bar: ProgressBar, tick : Long): ZIO[Console, Nothing, Unit] = {
     for {
       _ <- ZIO.succeed()
-      render = ProgressBar.render(bar)
+      render = ProgressBar.render(bar, tick)
       _ <-  if (!runningInsideIntellij)
-        putStr(ConsoleASCII.Positioning.left(1000)) *> putStr(render)
+        putStr(ConsoleASCII.Positioning.left(1000)) *> putStrLn(render)
       else
         putStr("\b" * 100) *> putStr(render)
     } yield ()
@@ -79,9 +85,9 @@ final case class ConsoleProgressLive(
 
 object ConsoleProgressLive {
 
-  case class DrawState(lastNumBarsDrawn : Int)
+  case class DrawState(startTime : LocalTime, lastNumBarsDrawn : Int)
 
-  def make(progressBarDimensions : ProgressBarDimensions): ZLayer[System, Throwable, ConsoleProgress] =
+  def make(progressBarDimensions : ProgressBarDimensions): ZLayer[System with Console, Throwable, ConsoleProgress] =
     {
       for {
         osOption        <- system.property("os.name")
@@ -89,7 +95,8 @@ object ConsoleProgressLive {
         insideIntellij  <- runningInsideIntellij
         _               <- enableWindowsTerminalProcessing.when(win & !insideIntellij)
         bars            <- RefM.make(ArrayBuffer.empty[ProgressBar])
-        drawState       <- Ref.make(DrawState(0))
+        now             <- ZIO.effectTotal(LocalTime.now())
+        drawState       <- Ref.make(DrawState(now, lastNumBarsDrawn = 0))
       } yield ConsoleProgressLive(bars, drawState, progressBarDimensions, insideIntellij)
   }.toLayer
 

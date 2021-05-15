@@ -8,7 +8,7 @@ import zio.{ExitCode, URIO, ZIO}
 object Application extends zio.App {
   override def run(args: List[String]): URIO[zio.ZEnv, ExitCode] = {
 
-    ZIO.succeed(()).exitCode
+    putStrLn("hello") *> ZIO.succeed(()).exitCode
 
   }
 }
