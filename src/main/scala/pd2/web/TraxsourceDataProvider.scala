@@ -81,10 +81,12 @@ object TraxsourceDataProvider {
   }
 
   private[web] def buildTraxsourcePageRequest(
-    urlTemplate: String,
-    dateFrom: LocalDate,
-    dateTo: LocalDate,
-    page: Int = 1): Either[Pd2Exception, SttpStringRequest] = {
+    urlTemplate : String,
+    dateFrom    : LocalDate,
+    dateTo      : LocalDate,
+    page        : Int = 1)
+    : Either[Pd2Exception, SttpStringRequest] =
+  {
     val domain = "https://traxsource.com"
 
     val pageParam = if (page != 1) s"&page=$page" else ""
