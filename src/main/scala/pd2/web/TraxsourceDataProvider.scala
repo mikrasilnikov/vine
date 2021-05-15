@@ -5,6 +5,7 @@ import pd2.helpers.Conversions._
 import pd2.ui.ConsoleProgressService.ConsoleProgress
 import pd2.ui.ProgressBar.ProgressBarDimensions
 import pd2.ui.ProgressOps._
+import pd2.web.Pd2Exception._
 import sttp.client3
 import sttp.client3.httpclient.zio.{SttpClient, send}
 import sttp.client3.{RequestT, asString, basicRequest}
@@ -66,9 +67,9 @@ object TraxsourceDataProvider {
     : ZIO[SttpClient, Pd2Exception, TraxsourceWebPage] =
   {
     for {
-      pageReq <- buildTraxsourcePageRequest(feed.urlTemplate, dateFrom, dateTo, page).toZio
-      pageResp <- makeTraxsourcePageRequest(pageReq)
-      page <- TraxsourceWebPage.parse(pageResp).toZio
+      pageReq   <- buildTraxsourcePageRequest(feed.urlTemplate, dateFrom, dateTo, page).toZio
+      pageResp  <- makeTraxsourcePageRequest(pageReq)
+      page      <- TraxsourceWebPage.parse(pageResp).toZio
     } yield page
   }
 
@@ -76,9 +77,9 @@ object TraxsourceDataProvider {
     : ZIO[SttpClient, Pd2Exception, List[TraxsourceServiceTrack]] =
   {
     for {
-      serviceReq <- buildTraxsourceServiceRequest(trackIds).toZio
+      serviceReq  <- buildTraxsourceServiceRequest(trackIds).toZio
       serviceResp <- makeTraxsourceServiceRequest(serviceReq)
-      tracks <- TraxsourceServiceTrack.fromServiceResponse(serviceResp).toZio
+      tracks      <- TraxsourceServiceTrack.fromServiceResponse(serviceResp).toZio
     } yield tracks
   }
 
@@ -112,15 +113,28 @@ object TraxsourceDataProvider {
 
   private def makeTraxsourcePageRequest(request: SttpStringRequest) : ZIO[SttpClient, Pd2Exception, String] = {
     for {
-      response <- send(request)
-        .flatMap(response => ZIO.fromEither(response.body))
-    } yield ???
-
-    ???
+      response  <- send(request).mapError(e => ServiceUnavailable(e.getMessage, Some(e)))
+      body      <- response.body.toZio.mapError(s => ServiceUnavailable(s, None))
+    } yield body
   }
 
-  private def buildTraxsourceServiceRequest(trackIds : List[Int]) : Either[Pd2Exception, SttpStringRequest] = ???
+  private def buildTraxsourceServiceRequest(trackIds : List[Int]) : Either[Pd2Exception, SttpStringRequest] =
+  {
+    val uriStr = s"https://w-static.traxsource.com/scripts/playlist.php?tracks=${trackIds.mkString(",")}"
 
-  private def makeTraxsourceServiceRequest(request : SttpStringRequest) : ZIO[SttpClient, Pd2Exception, String] = ???
+    val eitherRequest = for {
+      uri <- Uri.parse(uriStr)
+    } yield
+      traxsourceBasicRequest
+        .get(uri)
+        .response(asString)
+
+    eitherRequest.left.map(msg => InternalConfigurationError(msg))
+  }
+
+  private def makeTraxsourceServiceRequest(request : SttpStringRequest) : ZIO[SttpClient, Pd2Exception, String] = for {
+    response  <- send(request).mapError(e => ServiceUnavailable(e.getMessage, Some(e)))
+    body      <- response.body.toZio.mapError(s => ServiceUnavailable(s, None))
+  } yield body
 }
 
