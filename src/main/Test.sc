@@ -1,5 +1,3 @@
 import java.time.LocalDate
 
-val regex = "(\\w+):\\s"
-
-"track_id: \"8803989\",".replaceAll(regex, " \"$1\": ")
+(0 until 100).toList.length

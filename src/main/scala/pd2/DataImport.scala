@@ -4,8 +4,8 @@ import com.typesafe.config._
 import pd2.data.TrackParsing._
 import pd2.data.TrackTable.Track
 import pd2.data.{TrackParsing, TrackRepository}
-import pd2.ui.ProgressBar.ProgressBarLayout
-import pd2.ui.{ConsoleUIService, PercentageBar, ProgressBar}
+import pd2.ui.ProgressBar.{ProgressBarDimensions, ProgressBarLayout}
+import pd2.ui.{ConsoleProgressLive, ConsoleProgressService, ProgressBar}
 import slick.interop.zio.DatabaseProvider
 import slick.jdbc.JdbcProfile
 import zio._
@@ -46,7 +46,8 @@ object DataImport extends zio.App {
   def run(args: List[String]) = {
 
     def customLayer(params : Params) =
-      (createDbLayer(params.outputPath) >>> TrackRepository.live) ++ ConsoleUIService.live
+      (createDbLayer(params.outputPath) >>> TrackRepository.live) ++
+      ConsoleProgressLive.make(ProgressBarDimensions(15, 60))
 
     val app = parseAndValidateParams(args)
       .foldM (
@@ -72,8 +73,7 @@ object DataImport extends zio.App {
   }
 
   private def performImport(params : Params) = {
-    import pd2.ui.ConsoleUIService._
-
+    import pd2.ui.ConsoleProgressService.Service
     val batchSize = 100
     for {
       _ <- putStrLn("Parsing source data into memory...")
@@ -82,7 +82,7 @@ object DataImport extends zio.App {
       _ <- putStrLn(s"Creating schema...")
       _ <- TrackRepository.createSchema
       _ <- putStrLn(s"Inserting rows to database...")
-      barRef <- Ref.make(PercentageBar(0, tracks.length, ProgressBarLayout("Importing data", 15, 60)))
+      barRef <- Ref.make(PercentageBar(0, tracks.length, ProgressBarLayout("Importing data", ProgressBarDimensions(15, 60))))
       _ <-  drawProgressBar(barRef.asInstanceOf[Ref[ProgressBar]]).repeat(Schedule.duration(250.millis)).forever.fork
       _ <- ZIO.foreach_(tracks.grouped(batchSize).toList)(batch =>
           TrackRepository.insertSeq(batch) *>

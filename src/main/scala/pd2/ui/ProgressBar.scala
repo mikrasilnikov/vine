@@ -2,11 +2,14 @@ package pd2.ui
 
 import pd2.ui.ProgressBar._
 
-sealed trait ProgressBar
-case class PercentageBar(current : Int, total : Int, layout : ProgressBarLayout) extends ProgressBar
-case class WorkItemsBar(workItems : Vector[ItemState], layout: ProgressBarLayout) extends ProgressBar
+import scala.collection.mutable.ArrayBuffer
+
+final case class ProgressBar(workItems : ArrayBuffer[ItemState], layout: ProgressBarLayout)
 
 object ProgressBar {
+
+  case class ProgressBarDimensions(labelWidth: Int, barWidth: Int)
+  case class ProgressBarLayout(label : String, dimensions : ProgressBarDimensions)
 
   sealed trait ItemState
   case object Pending     extends ItemState
@@ -14,29 +17,11 @@ object ProgressBar {
   case object Completed   extends ItemState
   case object Failed      extends ItemState
 
-  case class ProgressBarLayout(label : String, labelWidth: Int, barWidth: Int)
+  def render(bar : ProgressBar, tick : Int = 0) : String = {
 
-  def render(bar : ProgressBar, tick : Int = 0) : String = bar match {
-    case pBar @ PercentageBar(_, _, _) => renderPercentageBar(pBar)
-    case wBar @ WorkItemsBar(_, _) => renderWorkItemsBar(wBar, tick)
-  }
+    val itemsPerBarCell = bar.workItems.length.toDouble / bar.layout.dimensions.barWidth
 
-  private def renderPercentageBar(bar : PercentageBar) : String = {
-    val fraction = bar.current.toDouble / bar.total
-    val filledItemsCount = (fraction.min(1) * bar.layout.barWidth).round.toInt
-    val freeItemsCount = bar.layout.barWidth - filledItemsCount
-
-    val barStr = "[" + "=" * filledItemsCount  + " " * freeItemsCount  + "]"
-    val percentStr = s"${(fraction * 100).round.toInt.formatted("%3d")}%"
-
-    s"${effectiveLabel(bar.layout)} $barStr $percentStr"
-  }
-
-  private def renderWorkItemsBar(bar : WorkItemsBar, tick : Int) : String = {
-
-    val itemsPerBarCell = bar.workItems.length.toDouble / bar.layout.barWidth
-
-    val barCells = (0 until bar.layout.barWidth)
+    val barCells = (0 until bar.layout.dimensions.barWidth)
       .map (cellIndex => (cellIndex * itemsPerBarCell, (cellIndex + 1) * itemsPerBarCell))
       .map { case (from, until) =>
         val fromInt = from.toInt
@@ -93,9 +78,9 @@ object ProgressBar {
     }
 
   private def effectiveLabel(layout : ProgressBarLayout): String = {
-    if (layout.label.length <= layout.labelWidth)
-      layout.label + (" " * (layout.labelWidth - layout.label.length))
+    if (layout.label.length <= layout.dimensions.labelWidth)
+      layout.label + (" " * (layout.dimensions.labelWidth - layout.label.length))
     else
-      layout.label.substring(0, layout.labelWidth)
+      layout.label.substring(0, layout.dimensions.labelWidth)
   }
 }

@@ -2,13 +2,15 @@ package pd2.web
 
 import pd2.config.TraxsourceFeed
 import pd2.helpers.Conversions._
-import pd2.ui.ConsoleUIService.ConsoleUI
+import pd2.ui.ConsoleProgressService.ConsoleProgress
+import pd2.ui.ProgressBar.ProgressBarDimensions
 import pd2.ui.ProgressOps._
 import sttp.client3
 import sttp.client3.httpclient.zio.{SttpClient, send}
 import sttp.client3.{RequestT, asString, basicRequest}
 import sttp.model.{HeaderNames, Uri}
 import zio.{Promise, ZIO}
+
 import java.time.LocalDate
 
 object TraxsourceDataProvider {
@@ -24,7 +26,8 @@ object TraxsourceDataProvider {
       dateFrom    : LocalDate,
       dateTo      : LocalDate,
       processTrack: TrackDto => ZIO[Any, Pd2Exception, Unit])
-    : ZIO[SttpClient with ConsoleUI, Pd2Exception, Unit] =
+      (implicit defaultDimensions : ProgressBarDimensions)
+    : ZIO[SttpClient with ConsoleProgress, Pd2Exception, Unit] =
     {
       for {
         firstPagePromise    <- Promise.make[Nothing, TraxsourceWebPage]
@@ -49,7 +52,7 @@ object TraxsourceDataProvider {
     pageNum          : Int,
     pagePromiseOption: Option[Promise[Nothing, TraxsourceWebPage]]
     )
-  : ZIO[SttpClient with ConsoleUI, Pd2Exception, Unit] = {
+  : ZIO[SttpClient with ConsoleProgress, Pd2Exception, Unit] = {
     for {
       page    <- getTracklistWebPage(feed, dateFrom, dateTo, pageNum).withProgressReporting(feed.name)
       _       <- pagePromiseOption.fold(ZIO.succeed(()))(p => p.succeed(page).unit)
