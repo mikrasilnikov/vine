@@ -10,7 +10,7 @@ import scala.util.{Failure, Success, Try}
 
 
 final case class TraxsourceWebPage(pager : TraxsourcePager, trackIds : List[Int]) {
-  def getRemainingPages: List[Int] = pager match {
+  val remainingPages: List[Int] = pager match {
     case Absent => Nil
     case Present(current, last) => (current + 1 to last).toList
   }

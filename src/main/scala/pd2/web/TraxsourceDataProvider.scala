@@ -20,33 +20,34 @@ object TraxsourceDataProvider {
 
   implicit val provider: WebDataProvider[TraxsourceFeed] = new WebDataProvider[TraxsourceFeed] {
     override def processTracks(
-      feed          : TraxsourceFeed,
-      dateFrom      : LocalDate,
-      dateTo        : LocalDate,
-      processAction : TrackDto => ZIO[Any, Pd2Exception, Unit])
+      feed        : TraxsourceFeed,
+      dateFrom    : LocalDate,
+      dateTo      : LocalDate,
+      processTrack: TrackDto => ZIO[Any, Pd2Exception, Unit])
     : ZIO[SttpClient with ConsoleUI, Pd2Exception, Unit] =
     {
       for {
-        promise   <- Promise.make[Nothing, TraxsourceWebPage]
-        fiber     <- processTracklistPage(feed, dateFrom, dateTo, processAction, 1, Some(promise))
-                      .withProgressReporting(feed.name).fork
-        fstPage   <- promise.await
-        remaining =  fstPage.getRemainingPages
-        _         <- ZIO.foreachPar_(remaining) { i =>
-                      processTracklistPage(feed, dateFrom, dateTo, processAction, i, None)
-                        .withProgressReporting(feed.name) }
-        _         <- fiber.join
+        firstPagePromise    <- Promise.make[Nothing, TraxsourceWebPage]
+        firstPageFiber      <- processTracklistPage(feed, dateFrom, dateTo, processTrack, 1, Some(firstPagePromise))
+                                .withProgressReporting(feed.name)
+                                .fork
+        firstPage           <- firstPagePromise.await
+        _                   <- ZIO.foreachPar_(firstPage.remainingPages) {
+                                i => processTracklistPage(feed, dateFrom, dateTo, processTrack, i, None)
+                                  .withProgressReporting(feed.name)
+                                }
+        _                   <- firstPageFiber.join
       } yield ()
     }
   }
 
   private def processTracklistPage(
-    feed              : TraxsourceFeed,
-    dateFrom          : LocalDate,
-    dateTo            : LocalDate,
-    processAction     : TrackDto => ZIO[Any, Pd2Exception, Unit],
-    pageNum           : Int,
-    pagePromiseOption : Option[Promise[Nothing, TraxsourceWebPage]]
+    feed             : TraxsourceFeed,
+    dateFrom         : LocalDate,
+    dateTo           : LocalDate,
+    processTrack     : TrackDto => ZIO[Any, Pd2Exception, Unit],
+    pageNum          : Int,
+    pagePromiseOption: Option[Promise[Nothing, TraxsourceWebPage]]
     )
   : ZIO[SttpClient with ConsoleUI, Pd2Exception, Unit] = {
     for {
@@ -54,7 +55,7 @@ object TraxsourceDataProvider {
       _       <- pagePromiseOption.fold(ZIO.succeed(()))(p => p.succeed(page).unit)
       tracks  <- getServiceData(page.trackIds).withProgressReporting(feed.name)
       _       <- ZIO.foreachPar_(tracks) {
-                    track => processAction(track.toTrackDto).withProgressReporting(feed.name)
+                    track => processTrack(track.toTrackDto).withProgressReporting(feed.name)
                  }
     } yield ()
   }
