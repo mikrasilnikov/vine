@@ -60,8 +60,8 @@ object DataImport extends zio.App {
     app.exitCode
   }
 
-  private def createDbLayer(targetFilePath : Path) = {
-
+  private def createDbLayer(targetFilePath : Path): ZLayer[Any, Throwable, Has[DatabaseProvider]] =
+  {
     val configMap = new java.util.HashMap[String, String]
     configMap.put("driver", "org.sqlite.JDBC")
     configMap.put("url", s"jdbc:sqlite:${targetFilePath.toString}")

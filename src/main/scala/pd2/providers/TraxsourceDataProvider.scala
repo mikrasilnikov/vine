@@ -1,17 +1,15 @@
-package pd2.web
+package pd2.providers
 
 import pd2.config.TraxsourceFeed
 import pd2.helpers.Conversions._
+import pd2.providers.Pd2Exception._
 import pd2.ui.ConsoleProgressService.ConsoleProgress
-import pd2.ui.ProgressBar.ProgressBarDimensions
 import pd2.ui.ProgressOps._
-import pd2.web.Pd2Exception._
 import sttp.client3
 import sttp.client3.httpclient.zio.{SttpClient, send}
 import sttp.client3.{RequestT, asString, basicRequest}
 import sttp.model.{HeaderNames, Uri}
 import zio.{Promise, ZIO}
-
 import java.time.LocalDate
 
 object TraxsourceDataProvider {
@@ -21,7 +19,8 @@ object TraxsourceDataProvider {
   private val traxsourceBasicRequest = basicRequest
     .header(HeaderNames.UserAgent, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.61 Safari/537.36")
 
-  implicit val provider: WebDataProvider[TraxsourceFeed] = new WebDataProvider[TraxsourceFeed] {
+  implicit val provider: WebDataProvider[TraxsourceFeed] = new WebDataProvider[TraxsourceFeed]
+  {
     override def processTracks(
       feed        : TraxsourceFeed,
       dateFrom    : LocalDate,
@@ -50,9 +49,9 @@ object TraxsourceDataProvider {
     dateTo           : LocalDate,
     processTrack     : TrackDto => ZIO[Any, Pd2Exception, Unit],
     pageNum          : Int,
-    pagePromiseOption: Option[Promise[Nothing, TraxsourceWebPage]]
-    )
-  : ZIO[SttpClient with ConsoleProgress, Pd2Exception, Unit] = {
+    pagePromiseOption: Option[Promise[Nothing, TraxsourceWebPage]])
+  : ZIO[SttpClient with ConsoleProgress, Pd2Exception, Unit] =
+  {
     for {
       page    <- getTracklistWebPage(feed, dateFrom, dateTo, pageNum).withProgressReporting(feed.name)
       _       <- pagePromiseOption.fold(ZIO.succeed(()))(p => p.succeed(page).unit)
@@ -83,7 +82,7 @@ object TraxsourceDataProvider {
     } yield tracks
   }
 
-  private[web] def buildTraxsourcePageRequest(
+  private[providers] def buildTraxsourcePageRequest(
     urlTemplate : String,
     dateFrom    : LocalDate,
     dateTo      : LocalDate,
@@ -111,7 +110,8 @@ object TraxsourceDataProvider {
     eitherRequest.left.map(msg => InternalConfigurationError(msg))
   }
 
-  private def makeTraxsourcePageRequest(request: SttpStringRequest) : ZIO[SttpClient, Pd2Exception, String] = {
+  private def makeTraxsourcePageRequest(request: SttpStringRequest) : ZIO[SttpClient, Pd2Exception, String] =
+  {
     for {
       response  <- send(request).mapError(e => ServiceUnavailable(e.getMessage, Some(e)))
       body      <- response.body.toZio.mapError(s => ServiceUnavailable(s, None))
@@ -132,9 +132,12 @@ object TraxsourceDataProvider {
     eitherRequest.left.map(msg => InternalConfigurationError(msg))
   }
 
-  private def makeTraxsourceServiceRequest(request : SttpStringRequest) : ZIO[SttpClient, Pd2Exception, String] = for {
-    response  <- send(request).mapError(e => ServiceUnavailable(e.getMessage, Some(e)))
-    body      <- response.body.toZio.mapError(s => ServiceUnavailable(s, None))
-  } yield body
+  private def makeTraxsourceServiceRequest(request : SttpStringRequest) : ZIO[SttpClient, Pd2Exception, String] =
+  {
+    for {
+      response <- send(request).mapError(e => ServiceUnavailable(e.getMessage, Some(e)))
+      body <- response.body.toZio.mapError(s => ServiceUnavailable(s, None))
+    } yield body
+  }
 }
 

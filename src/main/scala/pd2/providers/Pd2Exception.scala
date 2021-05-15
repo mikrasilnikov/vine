@@ -1,4 +1,4 @@
-package pd2.web
+package pd2.providers
 
 sealed trait Pd2Exception extends Throwable {
   val message : String

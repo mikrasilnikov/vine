@@ -1,7 +1,7 @@
-package pd2.web.test
+package pd2.providers.test
 
-import pd2.web.TraxsourceServiceTrack
-import pd2.web.TraxsourceServiceTrack.{TraxsourceServiceArtist, TraxsourceServiceLabel}
+import pd2.providers.TraxsourceServiceTrack
+import pd2.providers.TraxsourceServiceTrack.{TraxsourceServiceArtist, TraxsourceServiceLabel}
 import zio.ZIO
 import zio.console.putStrLn
 import zio.test.Assertion.equalTo

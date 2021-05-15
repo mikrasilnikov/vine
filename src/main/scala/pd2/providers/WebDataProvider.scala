@@ -1,4 +1,4 @@
-package pd2.web
+package pd2.providers
 
 import pd2.config.Feed
 import pd2.ui.ConsoleProgressService.ConsoleProgress

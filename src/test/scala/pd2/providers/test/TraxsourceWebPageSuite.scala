@@ -1,7 +1,7 @@
-package pd2.web.test
+package pd2.providers.test
 
-import pd2.web.TraxsourceWebPage
-import pd2.web.TraxsourceWebPage.{Absent, Present}
+import pd2.providers.TraxsourceWebPage
+import pd2.providers.TraxsourceWebPage.{Absent, Present}
 import zio.ZIO
 import zio.test.Assertion._
 import zio.test.{DefaultRunnableSpec, _}

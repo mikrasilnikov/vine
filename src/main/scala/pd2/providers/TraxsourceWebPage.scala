@@ -1,11 +1,11 @@
-package pd2.web
+package pd2.providers
 
 import net.ruippeixotog.scalascraper.browser.JsoupBrowser
 import net.ruippeixotog.scalascraper.dsl.DSL._
 import net.ruippeixotog.scalascraper.model.Document
 import net.ruippeixotog.scalascraper.scraper.ContentExtractors.{attr, attrs, element, elements}
-import pd2.web.Pd2Exception._
-import pd2.web.TraxsourceWebPage.{Absent, Present, TraxsourcePager}
+import pd2.providers.Pd2Exception._
+import pd2.providers.TraxsourceWebPage.{Absent, Present, TraxsourcePager}
 
 import scala.util.{Failure, Success, Try}
 
@@ -25,7 +25,7 @@ object TraxsourceWebPage {
   case object Absent extends TraxsourcePager
   final case class Present(currentPage : Int, lastPage : Int) extends TraxsourcePager
 
-  private[web] def parse(html : String) : Either[UnexpectedServiceResponse, TraxsourceWebPage] =
+  private[providers] def parse(html: String) : Either[UnexpectedServiceResponse, TraxsourceWebPage] =
   {
     val tryDoc = Try { browser.parseString(html) }
 
@@ -35,7 +35,7 @@ object TraxsourceWebPage {
     }
   }
 
-  private[web] def readDocument(html : String, doc : Document) : Either[UnexpectedServiceResponse, TraxsourceWebPage] =
+  private[providers] def readDocument(html: String, doc: Document) : Either[UnexpectedServiceResponse, TraxsourceWebPage] =
   {
     val trackListDiv = doc >?> element("div.trk-list-cont")
 

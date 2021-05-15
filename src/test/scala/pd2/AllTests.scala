@@ -2,7 +2,7 @@ package pd2
 
 import pd2.data.test.TrackSuite
 import pd2.ui.test.ProgressBarSuite
-import pd2.web.test.{TraxsourceWebPageSuite, TraxsourceServiceTrackSuite}
+import pd2.providers.test.{TraxsourceWebPageSuite, TraxsourceServiceTrackSuite}
 import zio.test.DefaultRunnableSpec
 
 object AllTests extends DefaultRunnableSpec  {
