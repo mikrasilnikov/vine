@@ -1,8 +1,8 @@
 package pd2.providers
 
 import pd2.config.Feed
-import pd2.ui.ConsoleProgressService.ConsoleProgress
 import pd2.ui.ProgressBar.ProgressBarDimensions
+import pd2.ui.consoleprogress.ConsoleProgress
 import sttp.client3.httpclient.zio.SttpClient
 import zio._
 

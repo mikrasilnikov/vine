@@ -23,7 +23,7 @@ final case class TraxsourceServiceTrack(
   mp3Url : String,
   keySig : String
 ) {
-  def toTrackDto : TrackDto = ???
+  def toTrackDto(data : Array[Byte]) : TrackDto = TrackDto(artists.map(_.name).mkString(", "), title, data)
 }
 
 object TraxsourceServiceTrack {
@@ -43,7 +43,9 @@ object TraxsourceServiceTrack {
       case Success(jsonString) =>
         // В ответе сервиса на Traxsource возвращается не просто json внутри xml, но сам json еще и не соответствует
         // спецификации. У него отстутсвуют кавычки у имен полей.
-        val fixedJson = jsonString.replaceAll("(\\w+):\\s", "\"$1\": ")
+        val fixedJson = jsonString
+          .replaceAll("(\\{|\\n\\s+|,\\s)(\\w+):\\s", "$1\"$2\": ")
+          .replaceAll("\\\\'", "'")
         for {
           json <- circe.parser.parse(fixedJson)
             .left.map(pf => UnexpectedServiceResponse(pf.message, fixedJson, None))

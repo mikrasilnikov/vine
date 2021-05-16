@@ -35,7 +35,6 @@ object ProgressBar {
       .map { items =>
         val cellState = {
           val somePending = items.contains(Pending)
-          val someCompleted = items.contains(Completed)
           val someInProgress = items.contains(InProgress)
           val allCompleted = items.forall(state => state == Completed)
 

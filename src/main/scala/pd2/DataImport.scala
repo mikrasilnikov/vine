@@ -5,9 +5,9 @@ import pd2.data.TrackParsing._
 import pd2.data.TrackRepository.TrackRepository
 import pd2.data.TrackTable.Track
 import pd2.data.{TrackParsing, TrackRepository}
-import pd2.ui.ConsoleProgressService.ConsoleProgress
-import pd2.ui.ProgressBar.{InProgress, ProgressBarDimensions, ProgressBarLayout}
-import pd2.ui.{ConsoleASCII, ConsoleProgressLive, ConsoleProgressService => Progress}
+import pd2.ui.ProgressBar.{InProgress, ProgressBarDimensions }
+import pd2.ui.ConsoleASCII
+import pd2.ui.consoleprogress.{ConsoleProgress, ConsoleProgressLive}
 import slick.interop.zio.DatabaseProvider
 import slick.jdbc.JdbcProfile
 import zio._
@@ -50,7 +50,7 @@ object DataImport extends zio.App {
 
     def customLayer(params : Params) =
       (createDbLayer(params.outputPath) >>> TrackRepository.live) ++
-      ConsoleProgressLive.make(ProgressBarDimensions(15, 60))
+      ConsoleProgressLive.makeLayer(ProgressBarDimensions(15, 60))
 
     val app = parseAndValidateParams(args)
       .foldM (
@@ -87,13 +87,13 @@ object DataImport extends zio.App {
       _ <- TrackRepository.createSchema
       _ <- putStrLn(s"Inserting rows to database...")
 
-      prgItems  <- Progress.acquireProgressItems("Importing data", tracks.length / batchSize)
-      _         <- Progress.drawProgress.repeat(Schedule.duration(333.millis)).forever.fork
+      prgItems  <- ConsoleProgress.acquireProgressItems("Importing data", tracks.length / batchSize)
+      _         <- ConsoleProgress.drawProgress.repeat(Schedule.duration(333.millis)).forever.fork
       _         <- ZIO.foreach_(tracks.grouped(batchSize).zip(prgItems).toList) {
                   case (batch, pItem) =>
-                    Progress.updateProgressItem(pItem, InProgress) *>
+                    ConsoleProgress.updateProgressItem(pItem, InProgress) *>
                     TrackRepository.insertSeq(batch) *>
-                    Progress.completeProgressItem(pItem)
+                    ConsoleProgress.completeProgressItem(pItem)
                 }
     } yield ()
   }
