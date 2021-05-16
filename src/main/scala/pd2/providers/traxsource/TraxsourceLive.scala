@@ -27,24 +27,27 @@ case class TraxsourceLive(
     .header(HeaderNames.UserAgent, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.61 Safari/537.36")
 
   override def processTracks[R](
-    feed          : TraxsourceFeed,
-    dateFrom      : LocalDate,
-    dateTo        : LocalDate,
-    processTrack  : TrackDto => ZIO[R, Pd2Exception, Unit])
-  : ZIO[R, Pd2Exception, Unit] = for {
-    firstPageProgress <- consoleProgress.acquireProgressItem(feed.name)
-    firstPagePromise  <- Promise.make[Nothing, TraxsourceWebPage]
-    firstPageFiber    <- processTracklistPage(feed, dateFrom, dateTo, processTrack, 1, firstPageProgress, Some(firstPagePromise)).fork
-    firstPage         <- firstPagePromise.await
-    remainingProgress <- consoleProgress.acquireProgressItems(feed.name, firstPage.remainingPages.length)
-    shuffled          =  shuffle(firstPage.remainingPages zip remainingProgress)
-    _                 <- ZIO.foreachPar_(shuffled) { case (i, p) =>
-                            consoleProgress.updateProgressItem(p, InProgress) *>
-                            processTracklistPage(feed, dateFrom, dateTo, processTrack, i, p, None) *>
-                            consoleProgress.completeProgressItem(p)
-                        }
-    _                 <- firstPageFiber.join
-  } yield ()
+      feed          : TraxsourceFeed,
+      dateFrom      : LocalDate,
+      dateTo        : LocalDate,
+      processTrack  : TrackDto => ZIO[R, Pd2Exception, Unit])
+  : ZIO[R, Pd2Exception, Unit] =
+  {
+    for {
+      firstPageProgress <- consoleProgress.acquireProgressItem(feed.name)
+      firstPagePromise  <- Promise.make[Nothing, TraxsourceWebPage]
+      firstPageFiber    <- processTracklistPage(feed, dateFrom, dateTo, processTrack, 1, firstPageProgress, Some(firstPagePromise)).fork
+      firstPage         <- firstPagePromise.await
+      remainingProgress <- consoleProgress.acquireProgressItems(feed.name, firstPage.remainingPages.length)
+      shuffled          =  shuffle(firstPage.remainingPages zip remainingProgress)
+      _                 <- ZIO.foreachPar_(shuffled) { case (i, p) =>
+                              consoleProgress.updateProgressItem(p, InProgress) *>
+                              processTracklistPage(feed, dateFrom, dateTo, processTrack, i, p, None) *>
+                              consoleProgress.completeProgressItem(p)
+                          }
+      _                 <- firstPageFiber.join
+    } yield ()
+  }
 
   private def processTracklistPage[R](
     feed             : TraxsourceFeed,

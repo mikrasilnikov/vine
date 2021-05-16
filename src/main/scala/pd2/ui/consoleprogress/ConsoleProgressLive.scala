@@ -19,8 +19,8 @@ final case class ConsoleProgressLive(
   drawState             : Ref[DrawState],
   defaultDimensions     : ProgressBarDimensions,
   runningInsideIntellij : Boolean)
-  extends ConsoleProgress.Service {
-
+  extends ConsoleProgress.Service
+{
   def updateProgressItem(item : ProgressItem, state: ItemState): ZIO[Any, Nothing, Unit] =
     progressBarsRef.modify { bars =>
       for {
@@ -30,26 +30,47 @@ final case class ConsoleProgressLive(
       } yield ((), bars)
     }
 
-  def acquireProgressItems(barLabel: String, amount : Int)
-    : ZIO[Any, Nothing, List[ProgressItem]] =
-  progressBarsRef.modify
-  {
-    bars =>  for {
-      _         <- ZIO.succeed()
-      barIndex  = {
-        val i = bars.indexWhere(bar => bar.layout.label == barLabel)
-        if (i == -1) {
-          bars.append(ProgressBar(ArrayBuffer.empty[ItemState], ProgressBarLayout(barLabel, defaultDimensions)))
-          bars.length - 1
-        } else i
-      }
-      bar     = bars(barIndex)
-      wiCount = bar.workItems.length
-      range   = wiCount until wiCount + amount
-      _       = bar.workItems.addAll(range.map(_ => Pending))
-      result  = range.map(i => ProgressItem(barLabel, i)).toList
+  def acquireProgressItems(barLabel: String, amount : Int): ZIO[Any, Nothing, List[ProgressItem]] =
+    progressBarsRef.modify { bars =>
+      for {
+        _ <- ZIO.succeed()
+        barIndex = {
+          val i = bars.indexWhere(bar => bar.layout.label == barLabel)
+          if (i == -1) {
+            bars.append(ProgressBar(ArrayBuffer.empty[ItemState], ProgressBarLayout(barLabel, defaultDimensions)))
+            bars.length - 1
+          } else i
+        }
+        bar = bars(barIndex)
+        wiCount = bar.workItems.length
+        range = wiCount until wiCount + amount
+        _ = bar.workItems.addAll(range.map(_ => Pending))
+        result = range.map(i => ProgressItem(barLabel, i)).toList
+      } yield (result, bars)
+    }
 
-    } yield (result, bars)
+
+  def acquireProgressItemsAfter(barLabel: String, amount : Int, existing : ProgressItem)
+    : ZIO[Any, Nothing, List[ProgressItem]] =
+  {
+    ???
+    progressBarsRef.modify { bars =>
+      for {
+        _ <- ZIO.succeed()
+        barIndex = {
+          val i = bars.indexWhere(bar => bar.layout.label == barLabel)
+          if (i == -1) {
+            bars.append(ProgressBar(ArrayBuffer.empty[ItemState], ProgressBarLayout(barLabel, defaultDimensions)))
+            bars.length - 1
+          } else i
+        }
+        bar = bars(barIndex)
+        wiCount = bar.workItems.length
+        range = wiCount until wiCount + amount
+        _ = bar.workItems.addAll(range.map(_ => Pending))
+        result = range.map(i => ProgressItem(barLabel, i)).toList
+      } yield (result, bars)
+    }
   }
 
   def acquireProgressItem(batchName: String)
@@ -95,11 +116,12 @@ object ConsoleProgressLive {
     }
 
   def makeCore(
-    system                : System.Service,
-    console               : Console.Service,
-    progressBarDimensions : ProgressBarDimensions)  =
+    system    : System.Service,
+    console   : Console.Service,
+    dimensions: ProgressBarDimensions)
+  : ZIO[Any, Throwable, ConsoleProgressLive] =
    {
-      val buildService = for {
+      for {
         osOption        <- system.property("os.name")
         win             =  osOption.map(_.toLowerCase.contains("windows")).fold(false)(_ => true)
         insideIntellij  <- runningInsideIntellij(system)
@@ -107,9 +129,7 @@ object ConsoleProgressLive {
         bars            <- RefM.make(ArrayBuffer.empty[ProgressBar])
         now             <- ZIO.effectTotal(LocalTime.now())
         drawState       <- Ref.make(DrawState(now, lastNumBarsDrawn = 0))
-      } yield ConsoleProgressLive(console, bars, drawState, progressBarDimensions, insideIntellij)
-
-     buildService
+      } yield ConsoleProgressLive(console, bars, drawState, dimensions, insideIntellij)
   }
 
   private def enableWindowsTerminalProcessing : Task[Unit] =
