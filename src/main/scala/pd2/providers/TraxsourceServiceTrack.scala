@@ -5,8 +5,10 @@ import io.circe.{CursorOp, Decoder, HCursor}
 import java.time.LocalDate
 import scala.util.{Failure, Success, Try}
 import io.circe
+import io.circe.Decoder.Result
 import pd2.providers.Pd2Exception.UnexpectedServiceResponse
 import pd2.providers.TraxsourceServiceTrack.{TraxsourceServiceArtist, TraxsourceServiceLabel}
+import sttp.model.Uri
 
 final case class TraxsourceServiceTrack(
   trackId : Int,
@@ -19,8 +21,8 @@ final case class TraxsourceServiceTrack(
   catNumber : String,
   durationSeconds : Int,
   releaseDate : LocalDate,
-  imageUrl : String,
-  mp3Url : String,
+  imageUrl : Uri,
+  mp3Url : Uri,
   keySig : String
 ) {
   def toTrackDto(data : Array[Byte]) : TrackDto = TrackDto(artists.map(_.name).mkString(", "), title, data)
@@ -74,6 +76,12 @@ object TraxsourceServiceTrack {
       } yield TraxsourceServiceLabel(id, name, webName)
   }
 
+  implicit val traxsourceServiceUriDecoder : Decoder[Uri] = new Decoder[Uri] {
+    override def apply(c: HCursor): Result[Uri] = for {
+      t <- c.value.as[String]
+    } yield Uri.parse(t).right.get
+  }
+
   implicit val traxsourceServiceTrackDecoder: Decoder[TraxsourceServiceTrack] = new Decoder[TraxsourceServiceTrack] {
     override def apply(c: HCursor) : Decoder.Result[TraxsourceServiceTrack] =
       for {
@@ -95,8 +103,8 @@ object TraxsourceServiceTrack {
               .sum
           }
         releaseDate <- c.downField("r_date").as[LocalDate]
-        imageUrl <- c.downField("image").as[String]
-        mp3Url <- c.downField("mp3").as[String]
+        imageUrl <- c.downField("image").as[Uri]
+        mp3Url <- c.downField("mp3").as[Uri]
         key <- c.downField("keysig").as[String]
       } yield TraxsourceServiceTrack(
         id, artists, title, titleUrl, trackUrl, label, genre,

@@ -1,5 +1,6 @@
 package pd2
 import pd2.config.{ConfigService, TraxsourceFeed}
+import pd2.providers.{Pd2Exception, TrackDto}
 import pd2.providers.traxsource.{Traxsource, TraxsourceLive}
 import pd2.ui.ProgressBar.ProgressBarDimensions
 import pd2.ui.consoleprogress.{ConsoleProgress, ConsoleProgressLive}
@@ -7,7 +8,7 @@ import sttp.client3.httpclient.zio.SttpClient
 import zio.console.{Console, putStr, putStrLn}
 import zio.nio.core.file.Path
 import zio.nio.file.Files
-import zio.{ExitCode, Ref, Schedule, URIO, ZIO, clock}
+import zio.{Chunk, ExitCode, Ref, Schedule, URIO, ZIO, clock}
 import zio.duration.durationInt
 import zio.system.System
 
@@ -26,6 +27,17 @@ object Application extends zio.App {
       "/genre/13/deep-house/all?cn=tracks&ipp=100&period={0},{1}&gf=4&ob=r_date&so=asc",
       List())
 
+    def fixPath(s : String) : String =
+      s.replaceAll("([:?])", "_")
+
+
+    def processTrack(trackDto: TrackDto) = for {
+      _ <- Files.writeBytes(
+          Path(
+            s"c:\\!temp\\tracks\\${fixPath(trackDto.artist)} - ${fixPath(trackDto.title)}.mp3"),
+            Chunk.fromArray(trackDto.data))
+    } yield ()
+
     val effect = for {
       resRef <- Ref.make(List[Int]())
 
@@ -33,16 +45,16 @@ object Application extends zio.App {
             feed1,
             LocalDate.parse("2021-04-01"),
             LocalDate.parse("2021-04-02"),
-            _ => resRef.modify(l => ((), 1 :: l)).unit *> zio.clock.sleep(50.millis)).fork
+            dto => processTrack(dto)).fork
 
       fiber2 <- Traxsource.processTracks(
             feed2,
             LocalDate.parse("2021-04-01"),
             LocalDate.parse("2021-04-02"),
-            _ => resRef.modify(l => ((), 1 :: l)).unit *> zio.clock.sleep(50.millis)).fork
+            dto => processTrack(dto)).fork
 
       progressFiber <- clock.sleep(1000.millis) *>
-                       ConsoleProgress.drawProgress.repeat(Schedule.duration(1.second)).forever.fork
+                       ConsoleProgress.drawProgress.repeat(Schedule.duration(333.millis)).forever.fork
 
       _   <- fiber1.join *> fiber2.join
       _   <- clock.sleep(1.second) *> progressFiber.interrupt

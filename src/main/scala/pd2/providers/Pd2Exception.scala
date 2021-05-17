@@ -24,6 +24,10 @@ object Pd2Exception {
     override val fatal: Boolean = false
   }
 
+  case class TraxsourceBadContentLength(message : String) extends Pd2Exception {
+    override val fatal: Boolean = false
+  }
+
   case class InternalConfigurationError(message: String) extends Pd2Exception {
     override val fatal: Boolean = true
   }
