@@ -39,9 +39,8 @@ case class TraxsourceLive(
       firstPageFiber    <- processTracklistPage(feed, dateFrom, dateTo, processTrack, 1, firstPageProgress, Some(firstPagePromise)).fork
       firstPage         <- firstPagePromise.await
       remainingProgress <- consoleProgress.acquireProgressItems(feed.name, firstPage.remainingPages.length)
-      shuffled          =  shuffle(firstPage.remainingPages zip remainingProgress)
-      _                 <- ZIO.foreachPar_(shuffled) { case (i, p) =>
-                              consoleProgress.updateProgressItem(p, InProgress) *>
+      _                 <- ZIO.foreachPar_(firstPage.remainingPages zip remainingProgress) { case (i, p) =>
+                              //consoleProgress.updateProgressItem(p, InProgress) *>
                               processTracklistPage(feed, dateFrom, dateTo, processTrack, i, p, None) *>
                               consoleProgress.completeProgressItem(p)
                           }
@@ -67,10 +66,9 @@ case class TraxsourceLive(
       tracks    <- getServiceData(page.trackIds)
       _         <- consoleProgress.completeProgressItem(pageProgressItem)
       progress  <- consoleProgress.acquireProgressItems(feed.name, tracks.length)
-      shuffled  =  shuffle(tracks zip progress)
-      _         <- ZIO.foreachPar_(shuffled) { case (t, p) =>
+      _         <- ZIO.foreachPar_(tracks zip progress) { case (t, p) =>
                       connectionsSemaphore.withPermit(
-                        consoleProgress.updateProgressItem(p, InProgress) *>
+                        //consoleProgress.updateProgressItem(p, InProgress) *>
                         processTrack(t.toTrackDto(Array[Byte]())) *>
                         consoleProgress.completeProgressItem(p))
                    }
@@ -163,7 +161,7 @@ case class TraxsourceLive(
 
   private def shuffle[A](as : List[A]) : List[A] =
     (as zip as.indices.map(_ => Random.nextInt()))
-      .sortBy { case (_, rnd) => rnd }
+      //.sortBy { case (_, rnd) => rnd }
       .map    { case (a, _) => a }
 }
 

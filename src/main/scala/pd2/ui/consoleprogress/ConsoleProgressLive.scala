@@ -49,30 +49,6 @@ final case class ConsoleProgressLive(
       } yield (result, bars)
     }
 
-
-  def acquireProgressItemsAfter(barLabel: String, amount : Int, existing : ProgressItem)
-    : ZIO[Any, Nothing, List[ProgressItem]] =
-  {
-    ???
-    progressBarsRef.modify { bars =>
-      for {
-        _ <- ZIO.succeed()
-        barIndex = {
-          val i = bars.indexWhere(bar => bar.layout.label == barLabel)
-          if (i == -1) {
-            bars.append(ProgressBar(ArrayBuffer.empty[ItemState], ProgressBarLayout(barLabel, defaultDimensions)))
-            bars.length - 1
-          } else i
-        }
-        bar = bars(barIndex)
-        wiCount = bar.workItems.length
-        range = wiCount until wiCount + amount
-        _ = bar.workItems.addAll(range.map(_ => Pending))
-        result = range.map(i => ProgressItem(barLabel, i)).toList
-      } yield (result, bars)
-    }
-  }
-
   def acquireProgressItem(batchName: String)
     : ZIO[Any, Nothing, ProgressItem] =
     acquireProgressItems(batchName, 1).map(_.head)
@@ -84,6 +60,7 @@ final case class ConsoleProgressLive(
       now   <- ZIO.effectTotal(LocalTime.now())
       tick  =  state.startTime.until(now, ChronoUnit.MILLIS) / 333
       _     <- console.putStr(ConsoleASCII.Positioning.up(state.lastNumBarsDrawn))
+                .when(state.lastNumBarsDrawn != 0)
       _     <- progressBarsRef.modify { bars =>
                 for {
                   _ <- ZIO.foreach_(bars)(bar => drawProgressBar(bar, tick))
@@ -110,7 +87,7 @@ object ConsoleProgressLive {
   case class DrawState(startTime : LocalTime, lastNumBarsDrawn : Int)
 
   def makeLayer(progressBarDimensions: ProgressBarDimensions)
-    : ZLayer[Has[System.Service] with Has[Console.Service], Throwable, ConsoleProgress] =
+    : ZLayer[System with Console, Throwable, ConsoleProgress] =
   ZLayer.fromServicesM[System.Service, Console.Service, Any, Throwable, ConsoleProgress.Service] {
     (system, console) => makeCore(system, console, progressBarDimensions)
   }
