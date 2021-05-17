@@ -110,10 +110,10 @@ object ConsoleProgressLive {
   case class DrawState(startTime : LocalTime, lastNumBarsDrawn : Int)
 
   def makeLayer(progressBarDimensions: ProgressBarDimensions)
-  : ZLayer[Has[System.Service] with Has[Console.Service], Throwable, ConsoleProgress] =
-    ZLayer.fromServicesM[System.Service, Console.Service, Any, Throwable, ConsoleProgress.Service] {
-      (system, console) => makeCore(system, console, progressBarDimensions)
-    }
+    : ZLayer[Has[System.Service] with Has[Console.Service], Throwable, ConsoleProgress] =
+  ZLayer.fromServicesM[System.Service, Console.Service, Any, Throwable, ConsoleProgress.Service] {
+    (system, console) => makeCore(system, console, progressBarDimensions)
+  }
 
   def makeCore(
     system    : System.Service,
