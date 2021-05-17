@@ -7,7 +7,7 @@ import pd2.ui.consoleprogress.ConsoleProgress.ProgressItem
 import pd2.ui.consoleprogress.ConsoleProgressLive.DrawState
 import pd2.ui.{ConsoleASCII, ProgressBar}
 import zio.system.System
-import zio.console.Console
+import zio.console.{Console, putStrLn}
 import zio.{Has, Ref, RefM, Task, ZIO, ZLayer}
 
 import java.time.LocalTime
@@ -100,7 +100,7 @@ object ConsoleProgressLive {
    {
       for {
         osOption        <- system.property("os.name")
-        win             =  osOption.map(_.toLowerCase.contains("windows")).fold(false)(_ => true)
+        win             =  osOption.map(_.toLowerCase.contains("windows")).fold(false)(identity)
         insideIntellij  <- runningInsideIntellij(system)
         _               <- enableWindowsTerminalProcessing.when(win & !insideIntellij)
         bars            <- RefM.make(ArrayBuffer.empty[ProgressBar])

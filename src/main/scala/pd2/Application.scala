@@ -12,10 +12,20 @@ import zio.{Chunk, ExitCode, Ref, Schedule, URIO, ZIO, clock}
 import zio.duration.durationInt
 import zio.system.System
 
+import java.io.File
+import java.nio.file.{Path => JPath, Files => JFiles}
 import java.time.LocalDate
+import scala.collection.mutable.ArrayBuffer
 
 object Application extends zio.App {
   override def run(args: List[String]): URIO[zio.ZEnv, ExitCode] = {
+
+    val currentDirectory =
+      new File(Application.getClass.getProtectionDomain.getCodeSource.getLocation.toURI).getPath
+
+    val targetDirectory = JPath.of(currentDirectory).getParent.resolve(JPath.of("previews"))
+    if (!JFiles.exists(targetDirectory))
+      JFiles.createDirectory(targetDirectory)
 
     val feed1 = TraxsourceFeed(
       "03-traxsource-tech-all",
@@ -28,30 +38,31 @@ object Application extends zio.App {
       List())
 
     def fixPath(s : String) : String =
-      s.replaceAll("([:?])", "_")
-
+      s.replaceAll("([<>:\"/\\\\|?*])", "_")
 
     def processTrack(trackDto: TrackDto) = for {
+      _ <- ZIO.succeed()
+      fileName = s"${fixPath(trackDto.artist)} - ${fixPath(trackDto.title)}.mp3"
       _ <- Files.writeBytes(
-          Path(
-            s"c:\\!temp\\tracks\\${fixPath(trackDto.artist)} - ${fixPath(trackDto.title)}.mp3"),
+          Path.fromJava(
+            targetDirectory.resolve(fileName)),
             Chunk.fromArray(trackDto.data))
     } yield ()
 
     val effect = for {
-      resRef <- Ref.make(List[Int]())
+      resRef <- Ref.make(0)
 
       fiber1 <- Traxsource.processTracks(
             feed1,
             LocalDate.parse("2021-04-01"),
             LocalDate.parse("2021-04-02"),
-            dto => processTrack(dto)).fork
+            dto => processTrack(dto) *> resRef.modify(i => ((), i + 1)).unit).fork
 
       fiber2 <- Traxsource.processTracks(
             feed2,
             LocalDate.parse("2021-04-01"),
             LocalDate.parse("2021-04-02"),
-            dto => processTrack(dto)).fork
+            dto => processTrack(dto) *> resRef.modify(i => ((), i + 1)).unit).fork
 
       progressFiber <- clock.sleep(1000.millis) *>
                        ConsoleProgress.drawProgress.repeat(Schedule.duration(333.millis)).forever.fork
@@ -59,7 +70,7 @@ object Application extends zio.App {
       _   <- fiber1.join *> fiber2.join
       _   <- clock.sleep(1.second) *> progressFiber.interrupt
       res <- resRef.get
-      _   <- putStrLn(s"\ntotal tracks: ${res.length}")
+      _   <- putStrLn(s"\ntotal tracks: ${res}")
     } yield ()
 
     import sttp.client3.httpclient.zio.HttpClientZioBackend
