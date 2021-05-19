@@ -26,7 +26,7 @@ final case class TraxsourceServiceTrack(
   keySig : String
 ) {
   val artist = artists.mkString(", ")
-  def toTrackDto : TrackDto = TrackDto(artists.map(_.name).mkString(", "), title, label.name)
+  def toTrackDto : TrackDto = TrackDto(artists.map(_.name).mkString(", "), title, label.name, trackId)
 }
 
 object TraxsourceServiceTrack {

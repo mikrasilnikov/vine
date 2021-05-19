@@ -4,25 +4,21 @@ import pd2.config.ConfigDescription.Feed.TraxsourceFeed
 import pd2.helpers.Conversions.EitherToZio
 import pd2.providers.Pd2Exception.{InternalConfigurationError, ServiceUnavailable, TraxsourceBadContentLength}
 import pd2.providers.{Pd2Exception, TrackDto, TraxsourceServiceTrack, TraxsourceWebPage}
-import pd2.ui.ProgressBar.InProgress
 import pd2.ui.consoleprogress.ConsoleProgress
 import pd2.ui.consoleprogress.ConsoleProgress.ProgressItem
 import sttp.client3
 import sttp.client3.httpclient.zio.SttpClient
-import sttp.client3.{RequestT, asByteArray, asString, basicRequest}
+import sttp.client3.{RequestT, asByteArray, basicRequest}
 import sttp.model.{HeaderNames, Uri}
 import zio.clock.Clock
-import zio.stream.ZStream
-import zio.{Has, Promise, Schedule, Semaphore, ZIO, ZLayer}
-
+import zio.{Promise, Schedule, Semaphore, ZIO, ZLayer}
 import java.nio.charset.StandardCharsets
 import java.time.LocalDate
-import scala.util.Random
 
 case class TraxsourceLive(
-  consoleProgress       : ConsoleProgress.Service,
-  sttpClient            : SttpClient.Service,
-  connectionsSemaphore  : Semaphore)
+  consoleProgress     : ConsoleProgress.Service,
+  sttpClient          : SttpClient.Service,
+  connectionsSemaphore: Semaphore)
   extends Traxsource.Service
 {
   type SttpRequest = RequestT[client3.Identity, Either[String, Array[Byte]], Any]
@@ -42,15 +38,13 @@ case class TraxsourceLive(
       firstPageProgress <- consoleProgress.acquireProgressItem(feed.name)
       firstPagePromise  <- Promise.make[Nothing, TraxsourceWebPage]
       firstPageFiber    <- processTracklistPage(
-                            feed, dateFrom, dateTo,
-                            filterTrack, processTrack, 1,
+                            feed, dateFrom, dateTo, 1,
+                            filterTrack, processTrack,
                             firstPageProgress, Some(firstPagePromise)).fork
       firstPage         <- firstPagePromise.await
       remainingProgress <- consoleProgress.acquireProgressItems(feed.name, firstPage.remainingPages.length)
-      _                 <- ZIO.foreachParN_(8)(firstPage.remainingPages zip remainingProgress) { case (i, p) =>
-                            //consoleProgress.updateProgressItem(p, InProgress) *>
-                              processTracklistPage(feed, dateFrom, dateTo, filterTrack, processTrack, i, p, None) *>
-                              consoleProgress.completeProgressItem(p)
+      _                 <- ZIO.foreachParN_(8)(firstPage.remainingPages zip remainingProgress) { case (page, p) =>
+                              processTracklistPage(feed, dateFrom, dateTo, page, filterTrack, processTrack, p, None)
                           }
       _                 <- firstPageFiber.join
     } yield ()
@@ -60,30 +54,28 @@ case class TraxsourceLive(
     feed             : TraxsourceFeed,
     dateFrom         : LocalDate,
     dateTo           : LocalDate,
+    pageNum          : Int,
     filterTrack      : TrackDto => ZIO[R1, E1, Boolean],
     processTrack     : (TrackDto, Array[Byte]) => ZIO[R2, E2, Unit],
-    pageNum          : Int,
     pageProgressItem : ProgressItem,
     pagePromiseOption: Option[Promise[Nothing, TraxsourceWebPage]])
   : ZIO[R1 with R2 with Clock, Throwable, Unit] =
   {
     for {
-      page            <- getTracklistWebPage(feed, dateFrom, dateTo, pageNum)
-      _               <- pagePromiseOption match {
-                        case Some(promise) => promise.succeed(page).unit
-                        case None => ZIO.succeed() }
-      serviceTracks   <- getServiceData(page.trackIds)
-      tracksWithDtos  <- ZIO.filter(serviceTracks.map(st => (st, st.toTrackDto))) { case (_, dto) => filterTrack(dto) }
-      _               <- consoleProgress.completeProgressItem(pageProgressItem)
-      progress        <- consoleProgress.acquireProgressItems(feed.name, tracksWithDtos.length)
-      _               <- ZIO.foreachParN_(8)(tracksWithDtos zip progress) { case ((t, dto), p) =>
-                        for {
-                          _   <- downloadTrack(t.mp3Url)
-                                  .flatMap(bytes => processTrack(dto, bytes))
-                                  .whenM(filterTrack(dto))
-                            _   <- consoleProgress.completeProgressItem(p)
-                        } yield ()
-                   }
+      page                    <- getTracklistWebPage(feed, dateFrom, dateTo, pageNum)
+      _                       <- pagePromiseOption.fold(ZIO.succeed())(_.succeed(page).unit)
+      serviceTracks           <- getServiceData(page.trackIds)
+      _                       <- consoleProgress.completeProgressItem(pageProgressItem)
+      filteredTracksWithDtos  <- ZIO.filter(serviceTracks.map(st => (st, st.toTrackDto))) { case (_, dto) => filterTrack(dto) }
+      tracksProgress          <- consoleProgress.acquireProgressItems(feed.name, filteredTracksWithDtos.length)
+      _                       <- ZIO.foreachParN_(8)(filteredTracksWithDtos zip tracksProgress) { case ((t, dto), p) =>
+                                  for {
+                                    //bytes <- downloadTrack(t.mp3Url)
+                                    bytes <- ZIO.succeed(Array[Byte]())
+                                    _     <- processTrack(dto, bytes)
+                                    _     <- consoleProgress.completeProgressItem(p)
+                                  } yield ()
+                                }
     } yield ()
   }
 
@@ -111,8 +103,8 @@ case class TraxsourceLive(
   {
     for {
       request <- ZIO.succeed(buildTraxsourceTrackRequest(trackUri))
-      trackBytes <- performTraxsourceRequest(request)
-    } yield trackBytes
+      bytes   <- performTraxsourceRequest(request)
+    } yield bytes
   }
 
   private[providers] def buildTraxsourcePageRequest(
@@ -168,6 +160,7 @@ case class TraxsourceLive(
   private def performTraxsourceRequest(request : SttpRequest) : ZIO[Clock, Pd2Exception, Array[Byte]] =
   {
     val effect = for {
+      //_ <- ZIO.effectTotal(println(request.uri.toString()))
       response            <- connectionsSemaphore.withPermit(sttpClient.send(request))
                                 .mapError(e => ServiceUnavailable(request.uri.toString() ++ "\n" ++ e.getMessage, Some(e)))
                                 .retry(Schedule.forever)
@@ -185,7 +178,7 @@ object TraxsourceLive {
   def makeLayer(maxConcurrentConnections : Int): ZLayer[ConsoleProgress with SttpClient, Nothing, Traxsource] =
     ZLayer.fromServicesM[ConsoleProgress.Service, SttpClient.Service, Any, Nothing, Traxsource.Service] {
     case (consoleProgress, sttpClient) => for {
-      semaphore <- Semaphore.make(maxConcurrentConnections)
-    } yield TraxsourceLive(consoleProgress, sttpClient, semaphore)
+      connectionsSemaphore <- Semaphore.make(maxConcurrentConnections)
+    } yield TraxsourceLive(consoleProgress, sttpClient, connectionsSemaphore)
   }
 }

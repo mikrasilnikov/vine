@@ -15,7 +15,7 @@ import pd2.config.Config
 import zio.blocking.Blocking
 
 import java.io.File
-import java.nio.file.{Files => JFiles, Path => JPath}
+import java.nio.file.{StandardOpenOption, Files => JFiles, Path => JPath}
 import java.time.LocalDate
 import scala.collection.mutable.ArrayBuffer
 
@@ -35,36 +35,39 @@ object Application extends zio.App {
     def fixPath(s : String) : String =
       s.replaceAll("([<>:\"/\\\\|?*])", "_")
 
-    def processTrack(date: LocalDate, trackDto: TrackDto, data : Array[Byte]): ZIO[Blocking with Config, Throwable, Unit] =
+    def processTrack(trackDto: TrackDto, data : Array[Byte]): ZIO[Blocking with Config, Throwable, Unit] =
       for {
         targetPath    <- Config.targetPath
-        _             <- Files.createDirectory(targetPath).whenM(Files.notExists(targetPath))
         fileName      =  s"${fixPath(trackDto.artist)} - ${fixPath(trackDto.title)}.mp3"
-        _             <- Files.writeBytes(targetPath / Path(fileName), Chunk.fromArray(data))
-                            .whenM(pd2.providers.filters.My.myFilter.filter(trackDto))
+        //_             <- Files.writeBytes(targetPath / Path(fileName), Chunk.fromArray(data))
+        _             <- ZIO.effect(JFiles.write(JPath.of((targetPath / Path(fileName)).toString()), data), StandardOpenOption.CREATE_NEW)
     } yield ()
 
     val date1 = LocalDate.parse("2021-04-01")
     val date2 = LocalDate.parse("2021-04-02")
 
     val effect = for {
-      resRef <- Ref.make(0)
+      targetPath    <- Config.targetPath
+      _             <- Files.createDirectory(targetPath).whenM(Files.notExists(targetPath))
+
+      receivedDtos <- Ref.make(List[TrackDto]())
+
+      progressFiber <- ConsoleProgress.drawProgress.repeat(Schedule.duration(500.millis)).forever.fork
 
       fiber1 <- Traxsource.processTracks(feed1, date1, date2,
-            pd2.providers.filters.My.myFilter.filter,
-            (dto, data) => processTrack(date1, dto, data) *> resRef.modify(i => ((), i + 1)).unit).fork
+                  pd2.providers.filters.My.nullFilter.filter,
+                  (dto, data) => processTrack(dto, data) *> receivedDtos.update(dto :: _))
 
-      fiber2 <- Traxsource.processTracks(feed2, date1, date2,
-        pd2.providers.filters.My.myFilter.filter,
-        (dto, data) => processTrack(date1, dto, data) *> resRef.modify(i => ((), i + 1)).unit).fork
+      /*fiber2 <- Traxsource.processTracks(feed2, date1, date2,
+                  pd2.providers.filters.My.nullFilter.filter,
+                  (dto, data) => processTrack(dto, data) *> receivedDtos.update(_ + 1)).fork*/
 
-      progressFiber <- clock.sleep(1000.millis) *>
-                       ConsoleProgress.drawProgress.repeat(Schedule.duration(333.millis)).forever.fork
+      // _   <- fiber1.join /**> fiber2.join*/
+      _   <- clock.sleep(500.millis) *> progressFiber.interrupt
+      res <- receivedDtos.map(_.sortBy(dto => (dto.artist, dto.title))).get
 
-      _   <- fiber1.join *> fiber2.join
-      _   <- clock.sleep(1.second) *> progressFiber.interrupt
-      res <- resRef.get
-      _   <- putStrLn(s"\ntotal tracks: ${res}")
+      _   <- Files.writeLines(targetPath.parent.get / Path("received.txt"), res.map(dto => s"${dto.internalId} - ${dto.artist} - ${dto.title}"))
+      _   <- putStrLn(s"\ntotal tracks: ${res.length}")
     } yield ()
 
     import sttp.client3.httpclient.zio.HttpClientZioBackend
