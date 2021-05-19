@@ -1,6 +1,6 @@
 package pd2.providers.traxsource
 
-import pd2.config.TraxsourceFeed
+import pd2.config.ConfigDescription.Feed.TraxsourceFeed
 import pd2.helpers.Conversions.EitherToZio
 import pd2.providers.Pd2Exception.{InternalConfigurationError, ServiceUnavailable, TraxsourceBadContentLength}
 import pd2.providers.{Pd2Exception, TrackDto, TraxsourceServiceTrack, TraxsourceWebPage}
@@ -12,6 +12,7 @@ import sttp.client3.httpclient.zio.SttpClient
 import sttp.client3.{RequestT, asByteArray, asString, basicRequest}
 import sttp.model.{HeaderNames, Uri}
 import zio.clock.Clock
+import zio.stream.ZStream
 import zio.{Has, Promise, Schedule, Semaphore, ZIO, ZLayer}
 
 import java.nio.charset.StandardCharsets
@@ -29,53 +30,59 @@ case class TraxsourceLive(
   private val traxsourceBasicRequest = basicRequest
     .header(HeaderNames.UserAgent, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.61 Safari/537.36")
 
-  override def processTracks[R, E <: Throwable](
+  override def processTracks[R1, R2, E1 <: Throwable, E2 <: Throwable](
       feed          : TraxsourceFeed,
       dateFrom      : LocalDate,
       dateTo        : LocalDate,
-      processTrack  : TrackDto => ZIO[R, E, Unit])
-  : ZIO[R with Clock, Throwable, Unit] =
+      filterTrack   : TrackDto => ZIO[R1, E1, Boolean],
+      processTrack  : (TrackDto, Array[Byte]) => ZIO[R2, E2, Unit])
+  : ZIO[R1 with R2 with Clock, Throwable, Unit] =
   {
     for {
       firstPageProgress <- consoleProgress.acquireProgressItem(feed.name)
       firstPagePromise  <- Promise.make[Nothing, TraxsourceWebPage]
-      firstPageFiber    <- processTracklistPage(feed, dateFrom, dateTo, processTrack, 1, firstPageProgress, Some(firstPagePromise)).fork
+      firstPageFiber    <- processTracklistPage(
+                            feed, dateFrom, dateTo,
+                            filterTrack, processTrack, 1,
+                            firstPageProgress, Some(firstPagePromise)).fork
       firstPage         <- firstPagePromise.await
       remainingProgress <- consoleProgress.acquireProgressItems(feed.name, firstPage.remainingPages.length)
       _                 <- ZIO.foreachParN_(8)(firstPage.remainingPages zip remainingProgress) { case (i, p) =>
                             //consoleProgress.updateProgressItem(p, InProgress) *>
-                              processTracklistPage(feed, dateFrom, dateTo, processTrack, i, p, None) *>
+                              processTracklistPage(feed, dateFrom, dateTo, filterTrack, processTrack, i, p, None) *>
                               consoleProgress.completeProgressItem(p)
                           }
       _                 <- firstPageFiber.join
     } yield ()
   }
 
-  private def processTracklistPage[R, E <: Throwable](
+  private def processTracklistPage[R1, R2, E1 <: Throwable, E2 <: Throwable](
     feed             : TraxsourceFeed,
     dateFrom         : LocalDate,
     dateTo           : LocalDate,
-    processTrack     : TrackDto => ZIO[R, E, Unit],
+    filterTrack      : TrackDto => ZIO[R1, E1, Boolean],
+    processTrack     : (TrackDto, Array[Byte]) => ZIO[R2, E2, Unit],
     pageNum          : Int,
     pageProgressItem : ProgressItem,
     pagePromiseOption: Option[Promise[Nothing, TraxsourceWebPage]])
-  : ZIO[R with Clock, Throwable, Unit] =
+  : ZIO[R1 with R2 with Clock, Throwable, Unit] =
   {
     for {
-      page      <- getTracklistWebPage(feed, dateFrom, dateTo, pageNum)
-      _         <- pagePromiseOption match {
-                      case Some(promise) => promise.succeed(page).unit
-                      case None => ZIO.succeed() }
-      tracks    <- getServiceData(page.trackIds)
-      _         <- consoleProgress.completeProgressItem(pageProgressItem)
-      progress  <- consoleProgress.acquireProgressItems(feed.name, tracks.length)
-      _         <- ZIO.foreachParN_(8)(tracks zip progress) { case (t, p) =>
-                      for {
-                        //_         <- consoleProgress.updateProgressItem(p, InProgress)
-                        trackBytes  <- downloadTrack(t.mp3Url)
-                        _           <- processTrack(t.toTrackDto(trackBytes))
-                        _           <- consoleProgress.completeProgressItem(p)
-                      } yield ()
+      page            <- getTracklistWebPage(feed, dateFrom, dateTo, pageNum)
+      _               <- pagePromiseOption match {
+                        case Some(promise) => promise.succeed(page).unit
+                        case None => ZIO.succeed() }
+      serviceTracks   <- getServiceData(page.trackIds)
+      tracksWithDtos  <- ZIO.filter(serviceTracks.map(st => (st, st.toTrackDto))) { case (_, dto) => filterTrack(dto) }
+      _               <- consoleProgress.completeProgressItem(pageProgressItem)
+      progress        <- consoleProgress.acquireProgressItems(feed.name, tracksWithDtos.length)
+      _               <- ZIO.foreachParN_(8)(tracksWithDtos zip progress) { case ((t, dto), p) =>
+                        for {
+                          _   <- downloadTrack(t.mp3Url)
+                                  .flatMap(bytes => processTrack(dto, bytes))
+                                  .whenM(filterTrack(dto))
+                            _   <- consoleProgress.completeProgressItem(p)
+                        } yield ()
                    }
     } yield ()
   }
@@ -161,7 +168,7 @@ case class TraxsourceLive(
   private def performTraxsourceRequest(request : SttpRequest) : ZIO[Clock, Pd2Exception, Array[Byte]] =
   {
     val effect = for {
-      response            <- sttpClient.send(request)
+      response            <- connectionsSemaphore.withPermit(sttpClient.send(request))
                                 .mapError(e => ServiceUnavailable(request.uri.toString() ++ "\n" ++ e.getMessage, Some(e)))
                                 .retry(Schedule.forever)
       contentLengthOption =  response.headers.find(_.name == HeaderNames.ContentLength).map(_.value.toInt)
@@ -170,13 +177,8 @@ case class TraxsourceLive(
                               .unless(contentLengthOption.forall(_ == body.length))
     } yield body
 
-    connectionsSemaphore.withPermit(effect)
+    effect
   }
-
-  private def shuffle[A](as : List[A]) : List[A] =
-    (as zip as.indices.map(_ => Random.nextInt()))
-      //.sortBy { case (_, rnd) => rnd }
-      .map    { case (a, _) => a }
 }
 
 object TraxsourceLive {

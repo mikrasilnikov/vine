@@ -25,7 +25,8 @@ final case class TraxsourceServiceTrack(
   mp3Url : Uri,
   keySig : String
 ) {
-  def toTrackDto(data : Array[Byte]) : TrackDto = TrackDto(artists.map(_.name).mkString(", "), title, data)
+  val artist = artists.mkString(", ")
+  def toTrackDto : TrackDto = TrackDto(artists.map(_.name).mkString(", "), title, label.name)
 }
 
 object TraxsourceServiceTrack {
@@ -79,7 +80,7 @@ object TraxsourceServiceTrack {
   implicit val traxsourceServiceUriDecoder : Decoder[Uri] = new Decoder[Uri] {
     override def apply(c: HCursor): Result[Uri] = for {
       t <- c.value.as[String]
-    } yield Uri.parse(t).right.get
+    } yield Uri.parse(t).getOrElse(???)
   }
 
   implicit val traxsourceServiceTrackDecoder: Decoder[TraxsourceServiceTrack] = new Decoder[TraxsourceServiceTrack] {

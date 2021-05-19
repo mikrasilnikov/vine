@@ -1,6 +1,6 @@
 package pd2.providers
 
-import pd2.config.TraxsourceFeed
+import pd2.config.ConfigDescription.Feed.TraxsourceFeed
 import pd2.providers.{Pd2Exception, TrackDto}
 import zio.clock.Clock
 import zio.{Has, ZIO}
@@ -16,12 +16,13 @@ package object traxsource {
   object Traxsource
   {
     trait Service {
-      def processTracks[R, E <: Throwable](
+      def processTracks[R1, R2, E1 <: Throwable, E2 <: Throwable](
         feed        : TraxsourceFeed,
         dateFrom    : LocalDate,
         dateTo      : LocalDate,
-        processTrack: TrackDto => ZIO[R, E, Unit])
-      : ZIO[R with Clock, Throwable, Unit]
+        filterTrack : TrackDto => ZIO[R1, E1, Boolean],
+        processTrack: (TrackDto, Array[Byte]) => ZIO[R2, E2, Unit])
+      : ZIO[R1 with R2 with Clock, Throwable, Unit]
     }
   }
 }
