@@ -11,7 +11,9 @@ import sttp.client3.httpclient.zio.SttpClient
 import sttp.client3.{RequestT, asByteArray, basicRequest}
 import sttp.model.{HeaderNames, Uri}
 import zio.clock.Clock
+import zio.duration.durationInt
 import zio.{Promise, Schedule, Semaphore, ZIO, ZLayer}
+
 import java.nio.charset.StandardCharsets
 import java.time.LocalDate
 
@@ -70,8 +72,8 @@ case class TraxsourceLive(
       tracksProgress          <- consoleProgress.acquireProgressItems(feed.name, filteredTracksWithDtos.length)
       _                       <- ZIO.foreachParN_(8)(filteredTracksWithDtos zip tracksProgress) { case ((t, dto), p) =>
                                   for {
-                                    //bytes <- downloadTrack(t.mp3Url)
-                                    bytes <- ZIO.succeed(Array[Byte]())
+                                    bytes <- downloadTrack(t.mp3Url)
+                                    //bytes <- ZIO.succeed(Array[Byte]())
                                     _     <- processTrack(dto, bytes)
                                     _     <- consoleProgress.completeProgressItem(p)
                                   } yield ()
@@ -159,18 +161,19 @@ case class TraxsourceLive(
 
   private def performTraxsourceRequest(request : SttpRequest) : ZIO[Clock, Pd2Exception, Array[Byte]] =
   {
-    val effect = for {
+    for {
       //_ <- ZIO.effectTotal(println(request.uri.toString()))
       response            <- connectionsSemaphore.withPermit(sttpClient.send(request))
                                 .mapError(e => ServiceUnavailable(request.uri.toString() ++ "\n" ++ e.getMessage, Some(e)))
-                                .retry(Schedule.forever)
+                                .retry(
+                                  Schedule.recurWhile[ServiceUnavailable](_ => true) &&
+                                  Schedule.recurs(10) &&
+                                  Schedule.spaced(5.seconds))
       contentLengthOption =  response.headers.find(_.name == HeaderNames.ContentLength).map(_.value.toInt)
       body                <- response.body.toZio.mapError(s => ServiceUnavailable(s, None))
       _                   <- ZIO.fail(TraxsourceBadContentLength("Bad content length"))
                               .unless(contentLengthOption.forall(_ == body.length))
     } yield body
-
-    effect
   }
 }
 

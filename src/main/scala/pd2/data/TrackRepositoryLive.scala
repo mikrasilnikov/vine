@@ -1,12 +1,13 @@
 package pd2.data
 
 import pd2.data.TrackTable.Track
-import zio.{Has, IO, ZIO}
+import zio.{Has, IO, ZIO, ZLayer}
 import slick.interop.zio.DatabaseProvider
 import slick.interop.zio.syntax._
 import slick.jdbc.JdbcProfile
 
-class TrackRepositoryLive(private val db: DatabaseProvider, private val profile : JdbcProfile) extends TrackRepository.Service {
+class TrackRepositoryLive(private val db: DatabaseProvider, private val profile : JdbcProfile)
+  extends TrackRepository.Service {
 
   import profile.api._
   private val items = TrackTable.table
@@ -25,5 +26,11 @@ class TrackRepositoryLive(private val db: DatabaseProvider, private val profile 
     ZIO.fromDBIO(items ++= tracks).provide(Has(db))
   }
 
+  override def getByUniqueName(uniqueName: String): IO[Throwable, Option[Track]] = ???
+}
 
+object TrackRepositoryLive {
+  def makeLayer : ZLayer[Has[DatabaseProvider], Throwable, TrackRepository] =
+    ZLayer.fromServiceM((db:DatabaseProvider) =>
+      db.profile.map { profile => new TrackRepositoryLive(db, profile) })
 }

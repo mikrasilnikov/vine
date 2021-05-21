@@ -29,6 +29,7 @@ object ConfigDescription {
   }
 
   object FilterTag {
+    case object Empty           extends FilterTag
     case object My              extends FilterTag
     case object OnlyNew         extends FilterTag
     case object NoShit          extends FilterTag

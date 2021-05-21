@@ -12,6 +12,8 @@ import zio.{Chunk, ExitCode, Has, Ref, Schedule, URIO, ZIO, clock}
 import zio.duration.durationInt
 import zio.system.System
 import pd2.config.Config
+import pd2.data.TrackRepositoryLive
+import slick.interop.zio.DatabaseProvider
 import zio.blocking.Blocking
 
 import java.io.File
@@ -24,12 +26,12 @@ object Application extends zio.App {
 
     val feed1 = TraxsourceFeed(
       "03-traxsource-tech-all",
-      "/genre/18/tech-house/all?cn=tracks&ipp=100&period={0},{1}&gf=18&ob=r_date&so=asc",
+      "/genre/18/tech-house/all?cn=tracks&ipp=100&period={0},{1}&gf=18",
       List())
 
     val feed2 = TraxsourceFeed(
       "03-traxsource-deep-all",
-      "/genre/13/deep-house/all?cn=tracks&ipp=100&period={0},{1}&gf=4&ob=r_date&so=asc",
+      "/genre/13/deep-house/all?cn=tracks&ipp=100&period={0},{1}&gf=4",
       List())
 
     def fixPath(s : String) : String =
@@ -39,8 +41,7 @@ object Application extends zio.App {
       for {
         targetPath    <- Config.targetPath
         fileName      =  s"${fixPath(trackDto.artist)} - ${fixPath(trackDto.title)}.mp3"
-        //_             <- Files.writeBytes(targetPath / Path(fileName), Chunk.fromArray(data))
-        _             <- ZIO.effect(JFiles.write(JPath.of((targetPath / Path(fileName)).toString()), data), StandardOpenOption.CREATE_NEW)
+        _             <- Files.writeBytes(targetPath / Path(fileName), Chunk.fromArray(data))
     } yield ()
 
     val date1 = LocalDate.parse("2021-04-01")
@@ -52,17 +53,17 @@ object Application extends zio.App {
 
       receivedDtos <- Ref.make(List[TrackDto]())
 
-      progressFiber <- ConsoleProgress.drawProgress.repeat(Schedule.duration(500.millis)).forever.fork
+      progressFiber <- ConsoleProgress.drawProgress.repeat(Schedule.fixed(500.millis)).forever.fork
 
       fiber1 <- Traxsource.processTracks(feed1, date1, date2,
-                  pd2.providers.filters.My.nullFilter.filter,
-                  (dto, data) => processTrack(dto, data) *> receivedDtos.update(dto :: _))
+                  pd2.providers.filters.my.filter,
+                  (dto, data) => processTrack(dto, data) *> receivedDtos.update(dto :: _)).fork
 
-      /*fiber2 <- Traxsource.processTracks(feed2, date1, date2,
-                  pd2.providers.filters.My.nullFilter.filter,
-                  (dto, data) => processTrack(dto, data) *> receivedDtos.update(_ + 1)).fork*/
+      fiber2 <- Traxsource.processTracks(feed2, date1, date2,
+                  pd2.providers.filters.my.filter,
+                  (dto, data) => processTrack(dto, data) *> receivedDtos.update(dto :: _)).fork
 
-      // _   <- fiber1.join /**> fiber2.join*/
+      _   <- fiber1.join *> fiber2.join
       _   <- clock.sleep(500.millis) *> progressFiber.interrupt
       res <- receivedDtos.map(_.sortBy(dto => (dto.artist, dto.title))).get
 

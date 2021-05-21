@@ -1,7 +1,21 @@
-import zio.{Queue, ZQueue}
+import io.getquill._
 
-import java.time.LocalDate
-import scala.util.Random
+val ctx = new SqlMirrorContext(MirrorSqlDialect, Literal)
+import ctx._
 
-Queue
-ZQueue
+case class Circle(radius: Float)
+
+val pi = quote(3.14159)
+
+val area = quote {
+  (c: Circle) => {
+    val r2 = c.radius * c.radius
+    pi * r2
+  }
+}
+
+val areas = quote {
+  query[Circle].map(c => area(c))
+}
+
+ctx.run(areas)

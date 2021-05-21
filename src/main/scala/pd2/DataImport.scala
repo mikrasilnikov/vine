@@ -2,7 +2,7 @@ package pd2
 
 import com.typesafe.config._
 import pd2.data.TrackParsing._
-import pd2.data.TrackRepository.TrackRepository
+import pd2.data._
 import pd2.data.TrackTable.Track
 import pd2.data.{TrackParsing, TrackRepository}
 import pd2.ui.ProgressBar.{InProgress, ProgressBarDimensions }
@@ -49,7 +49,7 @@ object DataImport extends zio.App {
   def run(args: List[String]) = {
 
     def customLayer(params : Params) =
-      (createDbLayer(params.outputPath) >>> TrackRepository.live) ++
+      (createDbLayer(params.outputPath) >>> TrackRepositoryLive.makeLayer) ++
       ConsoleProgressLive.makeLayer(ProgressBarDimensions(15, 60))
 
     val app = parseAndValidateParams(args)
