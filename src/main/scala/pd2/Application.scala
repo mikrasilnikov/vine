@@ -12,7 +12,7 @@ import zio.{Chunk, ExitCode, Has, Ref, Schedule, URIO, ZIO, clock}
 import zio.duration.durationInt
 import zio.system.System
 import pd2.config.Config
-import pd2.data.TrackRepositoryLive
+import pd2.data.{DbProviderLive, TrackRepositoryLive}
 import slick.interop.zio.DatabaseProvider
 import zio.blocking.Blocking
 
@@ -75,10 +75,10 @@ object Application extends zio.App {
 
     val consoleProgress = (System.live ++ Console.live) >>> ConsoleProgressLive.makeLayer(ProgressBarDimensions(25, 65))
     val sttpClient = HttpClientZioBackend.layer()
-    val traxsourceLive = TraxsourceLive.makeLayer(8)
-
+    val traxsourceLive = (consoleProgress ++ sttpClient) >>> TraxsourceLive.makeLayer(8)
     val configLayer = Config.makeLayer("config.json", date1)
-    val customLayer = ((consoleProgress ++ sttpClient) >>> traxsourceLive) ++ consoleProgress ++ configLayer
+    val trackRepository = DbProviderLive.makeLayer(Path("data.db")) >>> TrackRepositoryLive.makeLayer
+    val customLayer =  traxsourceLive ++ consoleProgress ++ configLayer ++ trackRepository
 
     effect.provideCustomLayer(customLayer).exitCode
   }

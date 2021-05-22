@@ -1,32 +1,28 @@
 package pd2.data
 
 import pd2.data.TrackTable.Track
-import zio.{Has, IO, ZIO, ZLayer}
+import zio.{Exit, Has, IO, URIO, ZIO, ZLayer, ZManaged}
 import slick.interop.zio.DatabaseProvider
 import slick.interop.zio.syntax._
-import slick.jdbc.JdbcProfile
+import slick.jdbc.{GetResult, JdbcProfile}
+import zio.Exit.{Failure, Success}
 
-class TrackRepositoryLive(private val db: DatabaseProvider, private val profile : JdbcProfile)
+class TrackRepositoryLive(val db: DatabaseProvider, val profile : JdbcProfile)
   extends TrackRepository.Service {
-
   import profile.api._
+
   private val items = TrackTable.table
 
-  override def createSchema: IO[Throwable, Unit] = {
-    val query = items.schema.create
-    ZIO.fromDBIO(query).provide(Has(db))
-  }
+  def createSchema: DBIO[Unit] = items.schema.create
 
-  override def getById(id: Int): IO[Throwable, Option[Track]] = {
-    val query = items.filter(_.id === id).result
-    ZIO.fromDBIO(query).map(_.headOption).provide(Has(db))
-  }
+  def getById(id: Int): DBIO[Track] = items.filter(_.id === id).result.head
 
-  override def insertSeq(tracks: Iterable[Track]): IO[Throwable, Option[Int]] = {
-    ZIO.fromDBIO(items ++= tracks).provide(Has(db))
-  }
+  def insertSeq(tracks: Iterable[Track]): DBIO[Option[Int]] = items ++= tracks
 
-  override def getByUniqueName(uniqueName: String): IO[Throwable, Option[Track]] = ???
+  def getByUniqueName(uniqueName: String): DBIO[Track] = items.filter(_.uniqueName === uniqueName).result.head
+
+  def tryGetByUniqueName(uniqueName: String): DBIO[Option[Track]] =
+    items.filter(_.uniqueName === uniqueName).result.headOption
 }
 
 object TrackRepositoryLive {

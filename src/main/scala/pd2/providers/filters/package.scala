@@ -3,11 +3,12 @@ package pd2.providers
 import pd2.config.ConfigDescription.FilterTag
 import pd2.config.{Config, FilterTag}
 import pd2.data.TrackRepository
+import pd2.helpers.Conversions.OptionToZio
 import zio.ZIO
 
 package object filters {
 
-  type FilterEnv = Config
+  type FilterEnv = Config with TrackRepository
 
   trait TrackFilter[F <: FilterTag] {
     def filter[R, E](dto : TrackDto) : ZIO[R with FilterEnv, E, Boolean]
@@ -29,8 +30,18 @@ package object filters {
     }
   }
 
-  implicit val onlyNew = new TrackFilter[FilterTag.OnlyNew.type] {
-    override def filter[R, E](dto: TrackDto): ZIO[R with FilterEnv, E, Boolean] = ???
+  val onlyNew = new TrackFilter[FilterTag.OnlyNew.type] {
+    override def filter[R, E](dto: TrackDto): ZIO[R with FilterEnv, E, Boolean] = {
+
+      for {
+        _ <- ZIO.succeed()
+        _ <- Config.myArtists
+        _ <- TrackRepository.createSchema
+        //uniqueName <- ZIO.fromOption(dto.uniqueName).orElseFail(new Exception)
+        //exists <- TrackRepository.getByUniqueName(uniqueName)
+      } yield true
+
+    }
   }
 
 

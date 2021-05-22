@@ -49,7 +49,7 @@ object DataImport extends zio.App {
   def run(args: List[String]) = {
 
     def customLayer(params : Params) =
-      (createDbLayer(params.outputPath) >>> TrackRepositoryLive.makeLayer) ++
+      (DbProviderLive.makeLayer(params.outputPath) >>> TrackRepositoryLive.makeLayer) ++
       ConsoleProgressLive.makeLayer(ProgressBarDimensions(15, 60))
 
     val app = parseAndValidateParams(args)
@@ -58,21 +58,6 @@ object DataImport extends zio.App {
         params => performImport(params).provideCustomLayer(customLayer(params)))
 
     app.exitCode
-  }
-
-  private def createDbLayer(targetFilePath : Path): ZLayer[Any, Throwable, Has[DatabaseProvider]] =
-  {
-    val configMap = new java.util.HashMap[String, String]
-    configMap.put("driver", "org.sqlite.JDBC")
-    configMap.put("url", s"jdbc:sqlite:${targetFilePath.toString}")
-    configMap.put("connectionPool", "disabled")
-
-    val config = ConfigFactory.parseMap(configMap)
-
-    val dbProfile = ZLayer.succeed(slick.jdbc.SQLiteProfile.asInstanceOf[JdbcProfile])
-    val dbConfig = ZLayer.fromEffect (ZIO.effect(config))
-
-    (dbConfig ++ dbProfile) >>> DatabaseProvider.live
   }
 
   private def performImport(params : Params)
