@@ -1,25 +1,44 @@
 package pd2.providers
 
+import org.joda.time.LocalDateTime
 import pd2.config.ConfigDescription.FilterTag
 import pd2.config.{Config, FilterTag}
-import pd2.data.Pd2Database
-import pd2.helpers.Conversions.OptionToZio
+import pd2.data.{Pd2Database, Pd2DatabaseService, Track}
 import zio.{Has, ZIO}
+import slick.dbio._
 
 package object filters {
 
+  implicit val ec: scala.concurrent.ExecutionContext = scala.concurrent.ExecutionContext.global
+
   type FilterEnv = Config with Pd2Database
 
-  trait TrackFilter[F <: FilterTag] {
-    def filter[R, E](dto : TrackDto) : ZIO[R with Config with Has[Pd2Database], E, Boolean]
+  trait TrackFilter { self =>
+    /** Проверяет, подходит ли трек */
+    def check(dto : TrackDto) : ZIO[FilterEnv, Throwable, Boolean]
+    /** Если нужно, выполняет дополнительные действия после скачивания трека */
+    def done(dto : TrackDto) : ZIO[FilterEnv, Throwable, Unit]
+
+    def ++(that : TrackFilter) : TrackFilter= new TrackFilter {
+      def check(dto: TrackDto): ZIO[FilterEnv, Throwable, Boolean] =
+        for {
+          x <- self.check(dto)
+          // TODO
+          y <- if (x) that.check(dto) else ZIO.succeed(false)
+        } yield x && y
+
+      def done(dto: TrackDto): ZIO[FilterEnv, Throwable, Unit] =
+        self.done(dto) *> that.done(dto)
+    }
   }
 
-  implicit val empty = new TrackFilter[FilterTag.Empty.type] {
-    override def filter[R, E](dto: TrackDto): ZIO[R with Config with Has[Pd2Database], E, Boolean] = ZIO.succeed(true)
+  val empty = new TrackFilter {
+    def check(dto: TrackDto): ZIO[Any, Throwable, Boolean] = ZIO.succeed(true)
+    def done(dto: TrackDto): ZIO[Any, Throwable, Unit] = ZIO.succeed()
   }
 
-  implicit val my = new TrackFilter[FilterTag.My.type] {
-    override def filter[R, E](dto: TrackDto): ZIO[R with Config with Has[Pd2Database], E, Boolean] = {
+  val my = new TrackFilter {
+    def check(dto: TrackDto): ZIO[Config, Throwable, Boolean] = {
       for {
         artists   <- Config.myArtists
         labels    <- Config.myLabels
@@ -28,20 +47,57 @@ package object filters {
         myLabel   =  labels.exists(l => l.toLowerCase == dto.label.toLowerCase)
       } yield myArtist || myLabel
     }
+
+    def done(dto: TrackDto): ZIO[Config, Throwable, Unit] = ZIO.succeed()
   }
 
-  val onlyNew = new TrackFilter[FilterTag.OnlyNew.type] {
-    override def filter[R, E](dto: TrackDto): ZIO[R with Config with Has[Pd2Database], E, Boolean] = {
-      for {
-        _ <- ZIO.succeed()
-        _ <- Config.myArtists
-        //_ <- TrackRepository.createSchema
-        //uniqueName <- dto.uniqueName.toZio
-        //exists <- TrackRepository.getByUniqueName(uniqueName)
-      } yield true
+  val onlyNew: TrackFilter = new TrackFilter
+  {
+    def check(dto: TrackDto): ZIO[Config with Pd2Database, Throwable, Boolean] =
+    {
+      ZIO.service[Pd2DatabaseService].flatMap { db =>
+        import db.profile.api._
+        for {
+          runId <- Config.runId
+          newTrack <- dto.toDbTrackZio(Some(runId))
 
+          transaction = for {
+            existingTrackOpt <- db.tracks.filter(t => t.uniqueName === newTrack.uniqueName).result
+
+            res0 <- existingTrackOpt.headOption match {
+              // Ранее такого трека мы не видели.
+              case None => (db.tracks += newTrack) >> DBIO.successful(true)
+              case Some(existingTrack) =>
+                existingTrack.queued match {
+                  // Такой трек раньше встречался и его уже скачали.
+                  case None => DBIO.successful(false)
+                  // Трек уже видели при текущем запуске (например, другой fiber его уже скачивает).
+                  case Some(id) if id == runId  => DBIO.successful(false)
+                  // Трек видели при предыдущем запуске, но не скачали. Например, из-за ошибки.
+                  case Some(_) =>
+                    db.tracks.filter(_.id === existingTrack.id).map(_.queued).update(Some(runId)) >>
+                    DBIO.successful(true) // проставляем треку текущий runId
+                }
+            }
+          } yield res0
+
+          res1 <- db.run(transaction.transactionally)
+        } yield res1
+      }
     }
+
+    def done(dto: TrackDto): ZIO[Pd2Database, Throwable, Unit] =
+      ZIO.service[Pd2DatabaseService].flatMap { db =>
+        import db.profile.api._
+        for {
+          uniqueName <- dto.uniqueNameZio
+          transaction = for {
+            existing  <- db.tracks.filter(_.uniqueName === uniqueName).result
+            id        =  existing.headOption.get.id // Оно точно должно там быть
+            _         <- db.tracks.filter(_.id === id).map(_.queued).update(None)
+          } yield ()
+          _ <- db.run(transaction.transactionally)
+        } yield ()
+      }
   }
-
-
 }

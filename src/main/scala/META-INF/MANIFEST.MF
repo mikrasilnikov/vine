@@ -1,31 +1,3 @@
 Manifest-Version: 1.0
 Main-Class: pd2.Application
-Class-Path: commons-net-3.8.0.jar izumi-reflect_2.13-1.1.1.jar htmlunit-
- 2.49.1.jar xml-apis-1.4.01.jar httpclient-backend_2.13-3.3.1.jar logbac
- k-classic-1.2.3.jar websocket-api-9.4.39.v20210325.jar scalaz-core_2.13
- -7.3.3.jar cats-core_2.13-2.5.0.jar shapeless_2.13-2.3.3.jar jetty-clie
- nt-9.4.39.v20210325.jar zio-streams_2.13-1.0.7.jar dec-0.1.2.jar joda-t
- ime-2.10.8.jar reactive-streams-1.0.3.jar htmlunit-core-js-2.49.0.jar c
- ats-kernel_2.13-2.5.0.jar zio-nio_2.13-1.0.0-RC10.jar jetty-http-9.4.39
- .v20210325.jar zio_2.13-3.3.1.jar commons-io-2.8.0.jar htmlunit-csspars
- er-1.7.0.jar httpclient-4.5.13.jar jna-5.8.0.jar jna-platform-5.8.0.jar
-  scala-scraper_2.13-2.2.1.jar core_2.13-3.3.1.jar zio-stacktracer_2.13-
- 1.0.7.jar core_2.13-1.4.6.jar xercesImpl-2.12.0.jar ws_2.13-1.2.3.jar c
- ore_2.13-1.2.3.jar httpmime-4.5.13.jar zio-slick-interop_2.13-0.3.0.jar
-  commons-lang3-3.12.0.jar websocket-client-9.4.39.v20210325.jar config-
- 1.4.1.jar circe-core_2.13-0.13.0.jar neko-htmlunit-2.49.0.jar izumi-ref
- lect-thirdparty-boopickle-shaded_2.13-1.1.1.jar jetty-util-9.4.39.v2021
- 0325.jar xalan-2.7.2.jar zio-nio-core_2.13-1.0.0-RC10.jar scala-collect
- ion-compat_2.13-2.2.0.jar circe-jawn_2.13-0.13.0.jar zio-macros_2.13-1.
- 0.6.jar salvation2-3.0.0.jar zio_2.13-1.2.3.jar httpcore-4.4.13.jar sli
- ck_2.13-3.3.3.jar jawn-parser_2.13-1.0.0.jar scala-library-2.13.5.jar r
- eactive-streams-flow-adapters-1.0.2.jar zio-interop-reactivestreams_2.1
- 3-1.3.4.jar simulacrum-scalafix-annotations_2.13-0.5.4.jar nscala-time_
- 2.13-2.26.0.jar slf4j-api-1.7.25.jar zio_2.13-1.0.7.jar commons-codec-1
- .11.jar serializer-2.7.2.jar commons-logging-1.2.jar logback-core-1.2.3
- .jar commons-text-1.9.jar websocket-common-9.4.39.v20210325.jar circe-n
- umbers_2.13-0.13.0.jar jsoup-1.13.1.jar sqlite-jdbc-3.34.0.jar cats-par
- se_2.13-0.3.2.jar circe-parser_2.13-0.13.0.jar httpclient-backend-zio_2
- .13-3.3.1.jar circe-generic_2.13-0.13.0.jar scala-xml_2.13-1.3.0.jar je
- tty-io-9.4.39.v20210325.jar joda-convert-2.2.1.jar
 

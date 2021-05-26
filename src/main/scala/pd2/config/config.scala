@@ -11,7 +11,7 @@ import zio.console.{Console, putStr, putStrLn}
 import java.io.File
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files => JFiles, Path => JPath}
-import java.time.LocalDate
+import java.time.{LocalDate, LocalDateTime}
 
 package object config {
 
@@ -26,6 +26,7 @@ package object config {
       val myLabels          : List[String]
       val shitLabels        : List[String]
       val targetPath        : Path
+      val runId             : LocalDateTime
     }
 
     def makeLayer(fileName : String, date : LocalDate) : ZLayer[Console with Blocking, Throwable, Config] = {
@@ -48,6 +49,7 @@ package object config {
         shit        <-  ZIO.foldLeft(description.noShit.dataFiles)(List[String]())(
                           (list, fName) => Files.readAllLines(jarPath / Path(fName)).map(list ++ _))
         _           <- putStrLn(s"Loaded ${shit.length} shit labels")
+        localDt     <- ZIO.succeed(LocalDateTime.now())
 
       } yield new Service {
         val configDescription: ConfigDescription = description
@@ -55,6 +57,7 @@ package object config {
         val myLabels: List[String] = labels
         val shitLabels: List[String] = shit
         val targetPath: Path = jarPath / Path(description.previewsFolder.replace("{0}", date.toString))
+        val runId : LocalDateTime = localDt
       }
 
       make.toLayer

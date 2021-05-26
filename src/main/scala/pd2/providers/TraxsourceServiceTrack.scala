@@ -6,11 +6,13 @@ import java.time.LocalDate
 import scala.util.{Failure, Success, Try}
 import io.circe
 import io.circe.Decoder.Result
+import io.circe.generic.semiauto.deriveDecoder
 import pd2.providers.Pd2Exception.UnexpectedServiceResponse
 import pd2.providers.TraxsourceServiceTrack.{TraxsourceServiceArtist, TraxsourceServiceLabel}
 import sttp.model.Uri
 
 final case class TraxsourceServiceTrack(
+  feed : String,
   trackId : Int,
   artists : List[TraxsourceServiceArtist],
   title : String,
@@ -26,7 +28,7 @@ final case class TraxsourceServiceTrack(
   keySig : String
 ) {
   val artist = artists.mkString(", ")
-  def toTrackDto : TrackDto = TrackDto(artists.map(_.name).mkString(", "), title, label.name, trackId)
+  def toTrackDto : TrackDto = TrackDto(artists.map(_.name).mkString(", "), title, label.name, releaseDate, feed, trackId)
 }
 
 object TraxsourceServiceTrack {
@@ -34,7 +36,7 @@ object TraxsourceServiceTrack {
   final case class TraxsourceServiceArtist(id: Int, tag: Int, name: String, webName : String)
   final case class TraxsourceServiceLabel(id : Int, name : String, webName : String)
 
-  private[providers] def fromServiceResponse(response: String) : Either[Pd2Exception, List[TraxsourceServiceTrack]] =
+  private[providers] def fromServiceResponse(response: String, feed : String) : Either[Pd2Exception, List[TraxsourceServiceTrack]] =
   {
     val tryJson = for {
       xml <- Try { scala.xml.XML.loadString(response) }
@@ -49,6 +51,9 @@ object TraxsourceServiceTrack {
         val fixedJson = jsonString
           .replaceAll("(\\{|\\n\\s+|,\\s)(\\w+):\\s", "$1\"$2\": ")
           .replaceAll("\\\\'", "'")
+
+        // Создаем декодер для каждой страницы, потому что иначе не получается проставить поле feed
+        implicit val trackDecoder: Decoder[TraxsourceServiceTrack] = traxsourceServiceTrackDecoder(feed)
         for {
           json <- circe.parser.parse(fixedJson)
             .left.map(pf => UnexpectedServiceResponse(pf.message, fixedJson, None))
@@ -83,7 +88,7 @@ object TraxsourceServiceTrack {
     } yield Uri.parse(t).getOrElse(???)
   }
 
-  implicit val traxsourceServiceTrackDecoder: Decoder[TraxsourceServiceTrack] = new Decoder[TraxsourceServiceTrack] {
+  def traxsourceServiceTrackDecoder(feed : String): Decoder[TraxsourceServiceTrack] = new Decoder[TraxsourceServiceTrack] {
     override def apply(c: HCursor) : Decoder.Result[TraxsourceServiceTrack] =
       for {
         id <- c.downField("track_id").as[Int]
@@ -107,7 +112,7 @@ object TraxsourceServiceTrack {
         imageUrl <- c.downField("image").as[Uri]
         mp3Url <- c.downField("mp3").as[Uri]
         key <- c.downField("keysig").as[String]
-      } yield TraxsourceServiceTrack(
+      } yield TraxsourceServiceTrack(feed,
         id, artists, title, titleUrl, trackUrl, label, genre,
         catNumber, duration, releaseDate, imageUrl, mp3Url, key)
   }

@@ -46,7 +46,7 @@ object DataImport extends zio.App {
 
     def customLayer(params : Params) =
       (Backend.makeLayer(SQLiteProfile, Backend.makeSqliteLiveConfig(params.outputPath)) >>>
-        Pd2Database.makeLayer(SQLiteProfile)) ++
+        Pd2DatabaseService.makeLayer(SQLiteProfile)) ++
       ConsoleProgressLive.makeLayer(ProgressBarDimensions(15, 60))
 
     val app = parseAndValidateParams(args)
@@ -58,11 +58,11 @@ object DataImport extends zio.App {
   }
 
   private def performImport(params : Params)
-    : ZIO[Console with Has[Pd2Database] with ConsoleProgress with Blocking with Clock, Throwable, Unit] =
+    : ZIO[Console with Has[Pd2DatabaseService] with ConsoleProgress with Blocking with Clock, Throwable, Unit] =
   {
     val batchSize = 100
 
-    ZIO.service[Pd2Database].flatMap{ db =>
+    ZIO.service[Pd2DatabaseService].flatMap{ db =>
       import db.profile.api._
 
       for {
@@ -120,9 +120,9 @@ object DataImport extends zio.App {
     } yield rewriteTrackName(artists, title)
 
     if (rewritten.isDefined)
-      Track(artist, title, rewritten.get, label, releaseDate, feed)
+      Track(artist, title, rewritten.get, label, releaseDate, feed, None)
     else
-      Track(artist, title, s"$artist - $title", None, None, None)
+      Track(artist, title, s"$artist - $title", None, None, feed, None)
   }
 
 }

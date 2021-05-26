@@ -35,6 +35,7 @@ object ConfigDescription {
     case object NoShit          extends FilterTag
     case object NoCompilations  extends FilterTag
     case object NoEdits         extends FilterTag
+    case object Complex         extends FilterTag
   }
 
   object Feed {

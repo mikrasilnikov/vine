@@ -1,8 +1,10 @@
 package pd2.providers.traxsource
 
 import pd2.config.ConfigDescription.Feed.TraxsourceFeed
+import pd2.config.FilterTag
 import pd2.helpers.Conversions.EitherToZio
 import pd2.providers.Pd2Exception.{InternalConfigurationError, ServiceUnavailable, TraxsourceBadContentLength}
+import pd2.providers.filters.{FilterEnv, TrackFilter}
 import pd2.providers.{Pd2Exception, TrackDto, TraxsourceServiceTrack, TraxsourceWebPage}
 import pd2.ui.consoleprogress.ConsoleProgress
 import pd2.ui.consoleprogress.ConsoleProgress.ProgressItem
@@ -15,7 +17,7 @@ import zio.duration.durationInt
 import zio.{Promise, Schedule, Semaphore, ZIO, ZLayer}
 
 import java.nio.charset.StandardCharsets
-import java.time.LocalDate
+import java.time.{LocalDate}
 
 case class TraxsourceLive(
   consoleProgress     : ConsoleProgress.Service,
@@ -27,54 +29,53 @@ case class TraxsourceLive(
 
   private val traxsourceBasicRequest = basicRequest
     .header(HeaderNames.UserAgent, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.61 Safari/537.36")
+    .readTimeout(concurrent.duration.Duration(30, concurrent.duration.SECONDS))
 
-  override def processTracks[R1, R2, E1 <: Throwable, E2 <: Throwable](
+  override def processTracks[R , E <: Throwable](
       feed          : TraxsourceFeed,
       dateFrom      : LocalDate,
       dateTo        : LocalDate,
-      filterTrack   : TrackDto => ZIO[R1, E1, Boolean],
-      processTrack  : (TrackDto, Array[Byte]) => ZIO[R2, E2, Unit])
-  : ZIO[R1 with R2 with Clock, Throwable, Unit] =
+      filter        : TrackFilter,
+      processTrack  : (TrackDto, Array[Byte]) => ZIO[R, E, Unit])
+  : ZIO[R with FilterEnv with Clock, Throwable, Unit] =
   {
     for {
       firstPageProgress <- consoleProgress.acquireProgressItem(feed.name)
       firstPagePromise  <- Promise.make[Nothing, TraxsourceWebPage]
-      firstPageFiber    <- processTracklistPage(
-                            feed, dateFrom, dateTo, 1,
-                            filterTrack, processTrack,
-                            firstPageProgress, Some(firstPagePromise)).fork
+      firstPageFiber    <- processTracklistPage(feed, dateFrom, dateTo, 1, filter, processTrack,
+                                                firstPageProgress, Some(firstPagePromise)).fork
       firstPage         <- firstPagePromise.await
       remainingProgress <- consoleProgress.acquireProgressItems(feed.name, firstPage.remainingPages.length)
       _                 <- ZIO.foreachParN_(8)(firstPage.remainingPages zip remainingProgress) { case (page, p) =>
-                              processTracklistPage(feed, dateFrom, dateTo, page, filterTrack, processTrack, p, None)
+                              processTracklistPage(feed, dateFrom, dateTo, page, filter, processTrack, p, None)
                           }
       _                 <- firstPageFiber.join
     } yield ()
   }
 
-  private def processTracklistPage[R1, R2, E1 <: Throwable, E2 <: Throwable](
+  private def processTracklistPage[R, E <: Throwable](
     feed             : TraxsourceFeed,
     dateFrom         : LocalDate,
     dateTo           : LocalDate,
     pageNum          : Int,
-    filterTrack      : TrackDto => ZIO[R1, E1, Boolean],
-    processTrack     : (TrackDto, Array[Byte]) => ZIO[R2, E2, Unit],
+    filter           : TrackFilter,
+    processTrack     : (TrackDto, Array[Byte]) => ZIO[R, E, Unit],
     pageProgressItem : ProgressItem,
     pagePromiseOption: Option[Promise[Nothing, TraxsourceWebPage]])
-  : ZIO[R1 with R2 with Clock, Throwable, Unit] =
+  : ZIO[R with FilterEnv with Clock, Throwable, Unit] =
   {
     for {
       page                    <- getTracklistWebPage(feed, dateFrom, dateTo, pageNum)
       _                       <- pagePromiseOption.fold(ZIO.succeed())(_.succeed(page).unit)
-      serviceTracks           <- getServiceData(page.trackIds)
+      serviceTracks           <- getServiceData(page.trackIds, feed.name)
       _                       <- consoleProgress.completeProgressItem(pageProgressItem)
-      filteredTracksWithDtos  <- ZIO.filter(serviceTracks.map(st => (st, st.toTrackDto))) { case (_, dto) => filterTrack(dto) }
+      filteredTracksWithDtos  <- ZIO.filter(serviceTracks.map(st => (st, st.toTrackDto))) { case (_, dto) => filter.check(dto) }
       tracksProgress          <- consoleProgress.acquireProgressItems(feed.name, filteredTracksWithDtos.length)
       _                       <- ZIO.foreachParN_(8)(filteredTracksWithDtos zip tracksProgress) { case ((t, dto), p) =>
                                   for {
-                                    bytes <- downloadTrack(t.mp3Url)
-                                    //bytes <- ZIO.succeed(Array[Byte]())
+                                    bytes <- downloadTrack(t.mp3Url) //bytes <- ZIO.succeed(Array[Byte]())
                                     _     <- processTrack(dto, bytes)
+                                    _     <- filter.done(dto)
                                     _     <- consoleProgress.completeProgressItem(p)
                                   } yield ()
                                 }
@@ -91,13 +92,13 @@ case class TraxsourceLive(
     } yield page
   }
 
-  private def getServiceData(trackIds : List[Int])
+  private def getServiceData(trackIds : List[Int], feed : String)
   : ZIO[Clock, Pd2Exception, List[TraxsourceServiceTrack]] =
   {
     for {
       serviceReq  <- buildTraxsourceServiceRequest(trackIds).toZio
       serviceResp <- performTraxsourceRequest(serviceReq).map(bytes => new String(bytes, StandardCharsets.UTF_8))
-      tracks      <- TraxsourceServiceTrack.fromServiceResponse(serviceResp).toZio
+      tracks      <- TraxsourceServiceTrack.fromServiceResponse(serviceResp, feed).toZio
     } yield tracks
   }
 

@@ -1,7 +1,8 @@
 package pd2
 import pd2.config.Config
 import pd2.config.ConfigDescription.Feed.TraxsourceFeed
-import pd2.data.{Backend, Pd2Database}
+import pd2.config.ConfigDescription.FilterTag
+import pd2.data.{Backend, Pd2DatabaseService}
 import pd2.providers.TrackDto
 import pd2.providers.traxsource.{Traxsource, TraxsourceLive}
 import pd2.ui.ProgressBar.ProgressBarDimensions
@@ -52,11 +53,11 @@ object Application extends zio.App {
       progressFiber <- ConsoleProgress.drawProgress.repeat(Schedule.fixed(500.millis)).forever.fork
 
       fiber1 <- Traxsource.processTracks(feed1, date1, date2,
-                  pd2.providers.filters.my.filter,
+                  /*pd2.providers.filters.my ++*/ pd2.providers.filters.onlyNew,
                   (dto, data) => processTrack(dto, data) *> receivedDtos.update(dto :: _)).fork
 
       fiber2 <- Traxsource.processTracks(feed2, date1, date2,
-                  pd2.providers.filters.my.filter,
+                  /*pd2.providers.filters.my ++*/ pd2.providers.filters.onlyNew,
                   (dto, data) => processTrack(dto, data) *> receivedDtos.update(dto :: _)).fork
 
       _   <- fiber1.join *> fiber2.join
@@ -74,7 +75,7 @@ object Application extends zio.App {
     val configLayer = Config.makeLayer("config.json", date1)
     val database =
       Backend.makeLayer(SQLiteProfile, Backend.makeSqliteLiveConfig(Path("c:\\!temp\\imported.db"))) >>>
-      Pd2Database.makeLayer(SQLiteProfile)
+      Pd2DatabaseService.makeLayer(SQLiteProfile)
     val customLayer =  traxsourceLive ++ consoleProgress ++ configLayer ++ database
 
     effect.provideCustomLayer(customLayer).exitCode

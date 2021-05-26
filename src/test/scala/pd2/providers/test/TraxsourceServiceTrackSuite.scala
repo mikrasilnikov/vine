@@ -18,6 +18,7 @@ object TraxsourceServiceTrackSuite extends DefaultRunnableSpec with ManagedTestR
 
         testM("Traxsource_ServiceResponse.xml") {
           val expected = TraxsourceServiceTrack(
+            "03-traxsource-soulful-all",
             8803989,
             List(TraxsourceServiceArtist(92248, 1, "Hannah Wants", "hannah-wants")),
             "Dot Com",
@@ -34,7 +35,7 @@ object TraxsourceServiceTrackSuite extends DefaultRunnableSpec with ManagedTestR
           )
 
           loadTextFileManaged("/Traxsource_ServiceResponse.xml")
-            .use { doc => ZIO.fromEither(TraxsourceServiceTrack.fromServiceResponse(doc))
+            .use { doc => ZIO.fromEither(TraxsourceServiceTrack.fromServiceResponse(doc, "03-traxsource-soulful-all"))
               .tapError(e => putStrLn(e.toString)) }
             .map(res => assert(res)(equalTo(List(expected))))
         }
