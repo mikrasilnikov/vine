@@ -1,15 +1,12 @@
 package pd2
 
-import com.typesafe.config._
 import pd2.data.TrackParsing._
 import pd2.data._
-import pd2.data.TrackTable.Track
-import pd2.data.{TrackParsing, TrackRepository}
-import pd2.ui.ProgressBar.{InProgress, ProgressBarDimensions }
+import pd2.data.TrackParsing
+import pd2.ui.ProgressBar.{InProgress, ProgressBarDimensions}
 import pd2.ui.ConsoleASCII
 import pd2.ui.consoleprogress.{ConsoleProgress, ConsoleProgressLive}
-import slick.interop.zio.DatabaseProvider
-import slick.jdbc.JdbcProfile
+import slick.jdbc.SQLiteProfile
 import zio._
 import zio.blocking.Blocking
 import zio.clock.Clock
@@ -17,7 +14,6 @@ import zio.console.{Console, putStrLn}
 import zio.duration.durationInt
 import zio.nio.core.file._
 import zio.nio.file._
-
 import java.io.IOException
 import java.nio.charset.StandardCharsets
 import java.time.LocalDate
@@ -49,7 +45,8 @@ object DataImport extends zio.App {
   def run(args: List[String]) = {
 
     def customLayer(params : Params) =
-      (DbProviderLive.makeLayer(params.outputPath) >>> TrackRepositoryLive.makeLayer) ++
+      (Backend.makeLayer(SQLiteProfile, Backend.makeSqliteLiveConfig(params.outputPath)) >>>
+        Pd2Database.makeLayer(SQLiteProfile)) ++
       ConsoleProgressLive.makeLayer(ProgressBarDimensions(15, 60))
 
     val app = parseAndValidateParams(args)
@@ -61,26 +58,32 @@ object DataImport extends zio.App {
   }
 
   private def performImport(params : Params)
-    : ZIO[Console with TrackRepository with ConsoleProgress with Blocking with Clock, Throwable, Unit] =
+    : ZIO[Console with Has[Pd2Database] with ConsoleProgress with Blocking with Clock, Throwable, Unit] =
   {
     val batchSize = 100
-    for {
-      _ <- putStrLn("Parsing source data into memory...")
-      tracks <- getUniqueTracks(params.sourcePath)
-      _ <- putStrLn(s"Got ${tracks.length} unique tracks")
-      _ <- putStrLn(s"Creating schema...")
-      _ <- TrackRepository.createSchema
-      _ <- putStrLn(s"Inserting rows to database...")
 
-      prgItems  <- ConsoleProgress.acquireProgressItems("Importing data", tracks.length / batchSize)
-      _         <- ConsoleProgress.drawProgress.repeat(Schedule.duration(333.millis)).forever.fork
-      _         <- ZIO.foreach_(tracks.grouped(batchSize).zip(prgItems).toList) {
-                  case (batch, pItem) =>
-                    ConsoleProgress.updateProgressItem(pItem, InProgress) *>
-                    TrackRepository.insertSeq(batch) *>
-                    ConsoleProgress.completeProgressItem(pItem)
-                }
-    } yield ()
+    ZIO.service[Pd2Database].flatMap{ db =>
+      import db.profile.api._
+
+      for {
+        _ <- putStrLn("Parsing source data into memory...")
+        tracks <- getUniqueTracks(params.sourcePath)
+        _ <- putStrLn(s"Got ${tracks.length} unique tracks")
+        _ <- putStrLn(s"Creating schema...")
+        _ <- db.run(db.tracks.schema.create)
+        _ <- putStrLn(s"Inserting rows to database...")
+
+        prgItems  <- ConsoleProgress.acquireProgressItems("Importing data", tracks.length / batchSize)
+        _         <- ConsoleProgress.drawProgress.repeat(Schedule.duration(333.millis)).forever.fork
+        _         <- ZIO.foreach_(tracks.grouped(batchSize).zip(prgItems).toList) {
+          case (batch, pItem) =>
+            ConsoleProgress.updateProgressItem(pItem, InProgress) *>
+              //TrackRepository.insertSeq(batch) *>
+              db.run(db.tracks ++= batch) *>
+              ConsoleProgress.completeProgressItem(pItem)
+        }
+      } yield ()
+    }
   }
 
   private def getUniqueTracks(dataPath : Path): ZIO[Blocking, IOException, List[Track]] = {

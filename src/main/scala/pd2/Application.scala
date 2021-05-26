@@ -1,25 +1,21 @@
 package pd2
+import pd2.config.Config
 import pd2.config.ConfigDescription.Feed.TraxsourceFeed
-import pd2.providers.{Pd2Exception, TrackDto}
+import pd2.data.{Backend, Pd2Database}
+import pd2.providers.TrackDto
 import pd2.providers.traxsource.{Traxsource, TraxsourceLive}
 import pd2.ui.ProgressBar.ProgressBarDimensions
 import pd2.ui.consoleprogress.{ConsoleProgress, ConsoleProgressLive}
-import sttp.client3.httpclient.zio.SttpClient
-import zio.console.{Console, putStr, putStrLn}
+import slick.jdbc.SQLiteProfile
+import zio.blocking.Blocking
+import zio.console.{Console, putStrLn}
+import zio.duration.durationInt
 import zio.nio.core.file.Path
 import zio.nio.file.Files
-import zio.{Chunk, ExitCode, Has, Ref, Schedule, URIO, ZIO, clock}
-import zio.duration.durationInt
 import zio.system.System
-import pd2.config.Config
-import pd2.data.{DbProviderLive, TrackRepositoryLive}
-import slick.interop.zio.DatabaseProvider
-import zio.blocking.Blocking
+import zio.{Chunk, ExitCode, Ref, Schedule, URIO, ZIO, clock}
 
-import java.io.File
-import java.nio.file.{StandardOpenOption, Files => JFiles, Path => JPath}
 import java.time.LocalDate
-import scala.collection.mutable.ArrayBuffer
 
 object Application extends zio.App {
   override def run(args: List[String]): URIO[zio.ZEnv, ExitCode] = {
@@ -74,11 +70,12 @@ object Application extends zio.App {
     import sttp.client3.httpclient.zio.HttpClientZioBackend
 
     val consoleProgress = (System.live ++ Console.live) >>> ConsoleProgressLive.makeLayer(ProgressBarDimensions(25, 65))
-    val sttpClient = HttpClientZioBackend.layer()
-    val traxsourceLive = (consoleProgress ++ sttpClient) >>> TraxsourceLive.makeLayer(8)
+    val traxsourceLive = (consoleProgress ++ HttpClientZioBackend.layer()) >>> TraxsourceLive.makeLayer(8)
     val configLayer = Config.makeLayer("config.json", date1)
-    val trackRepository = DbProviderLive.makeLayer(Path("data.db")) >>> TrackRepositoryLive.makeLayer
-    val customLayer =  traxsourceLive ++ consoleProgress ++ configLayer ++ trackRepository
+    val database =
+      Backend.makeLayer(SQLiteProfile, Backend.makeSqliteLiveConfig(Path("c:\\!temp\\imported.db"))) >>>
+      Pd2Database.makeLayer(SQLiteProfile)
+    val customLayer =  traxsourceLive ++ consoleProgress ++ configLayer ++ database
 
     effect.provideCustomLayer(customLayer).exitCode
   }

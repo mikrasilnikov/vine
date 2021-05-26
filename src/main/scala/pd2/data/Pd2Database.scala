@@ -1,18 +1,11 @@
 package pd2.data
 
+import slick.jdbc.{JdbcBackend, JdbcProfile}
+import zio.{Has, ZIO, ZLayer}
 import java.time.LocalDate
-import slick.jdbc.SQLiteProfile.api._
 
-object TrackTable {
-
-  case class Track(
-    artist: String,
-    title: String,
-    uniqueName: String,
-    label: Option[String],
-    releaseDate: Option[LocalDate],
-    feed: Option[String],
-    id: Int = 0)
+case class Pd2Database(profile: JdbcProfile, override val backendDb: JdbcBackend#Database) extends Database {
+  import profile.api._
 
   //noinspection MutatorLikeMethodIsParameterless
   class Tracks(tag: Tag) extends Table[Track](tag, "tracks") {
@@ -29,7 +22,21 @@ object TrackTable {
     def uniqueNameIndex = index("ixUniqueName", uniqueName, unique = true)
   }
 
-  val table = TableQuery[Tracks]
+  val tracks = TableQuery[Tracks]
+}
 
+case class Track(
+  artist: String,
+  title: String,
+  uniqueName: String,
+  label: Option[String],
+  releaseDate: Option[LocalDate],
+  feed: Option[String],
+  id: Int = 0)
+
+object Pd2Database {
+  def makeLayer(profile: JdbcProfile) : ZLayer[Has[JdbcBackend#Database], Nothing, Has[Pd2Database]] = {
+    ZLayer.fromService[JdbcBackend#Database, Pd2Database](db => Pd2Database(profile, db))
+  }
 }
 
