@@ -2,6 +2,7 @@ package pd2.providers.traxsource
 
 import pd2.config.ConfigDescription.Feed.TraxsourceFeed
 import pd2.config.FilterTag
+import pd2.data.{Database, Pd2Database, DatabaseService}
 import pd2.helpers.Conversions.EitherToZio
 import pd2.providers.Pd2Exception.{InternalConfigurationError, ServiceUnavailable, TraxsourceBadContentLength}
 import pd2.providers.filters.{FilterEnv, TrackFilter}
@@ -17,7 +18,7 @@ import zio.duration.durationInt
 import zio.{Promise, Schedule, Semaphore, ZIO, ZLayer}
 
 import java.nio.charset.StandardCharsets
-import java.time.{LocalDate}
+import java.time.LocalDate
 
 case class TraxsourceLive(
   consoleProgress     : ConsoleProgress.Service,
@@ -73,10 +74,10 @@ case class TraxsourceLive(
       tracksProgress          <- consoleProgress.acquireProgressItems(feed.name, filteredTracksWithDtos.length)
       _                       <- ZIO.foreachParN_(8)(filteredTracksWithDtos zip tracksProgress) { case ((t, dto), p) =>
                                   for {
-                                    bytes <- downloadTrack(t.mp3Url) //bytes <- ZIO.succeed(Array[Byte]())
-                                    _     <- processTrack(dto, bytes)
-                                    _     <- filter.done(dto)
-                                    _     <- consoleProgress.completeProgressItem(p)
+                                    _ <- downloadTrack(t.mp3Url)
+                                          .flatMap(bytes => processTrack(dto, bytes) *> filter.done(dto))
+                                          .whenM(filter.checkBeforeProcessing(dto))
+                                    _ <- consoleProgress.completeProgressItem(p)
                                   } yield ()
                                 }
     } yield ()
@@ -163,8 +164,8 @@ case class TraxsourceLive(
   private def performTraxsourceRequest(request : SttpRequest) : ZIO[Clock, Pd2Exception, Array[Byte]] =
   {
     for {
-      //_ <- ZIO.effectTotal(println(request.uri.toString()))
-      response            <- connectionsSemaphore.withPermit(sttpClient.send(request))
+      response            <- connectionsSemaphore.withPermit(
+                                  sttpClient.send(request).timeoutFail(ServiceUnavailable("Timeout"))(60.second))
                                 .mapError(e => ServiceUnavailable(request.uri.toString() ++ "\n" ++ e.getMessage, Some(e)))
                                 .retry(
                                   Schedule.recurWhile[ServiceUnavailable](_ => true) &&

@@ -1,6 +1,6 @@
 package pd2.data
 
-import slick.dbio.{DBIOAction, NoStream}
+import slick.dbio.{DBIOAction, Effect, NoStream}
 import slick.jdbc.JdbcBackend
 import zio.clock.Clock
 import zio.duration.durationInt
@@ -15,6 +15,6 @@ trait Database {
    *  Пожалуй в этом случае лучше просто не пытаться писать в базу параллельно. */
   val accessSemaphore : Semaphore
 
-  final def run[R](a: DBIOAction[R, NoStream, Nothing]): Task[R] =
+  final def run[R](a: DBIOAction[R, NoStream, Effect.All]): Task[R] =
     accessSemaphore.withPermit(ZIO.fromFuture(_ => backendDb.run(a)))
 }

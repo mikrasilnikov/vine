@@ -2,7 +2,7 @@ package pd2
 import pd2.config.Config
 import pd2.config.ConfigDescription.Feed.TraxsourceFeed
 import pd2.config.ConfigDescription.FilterTag
-import pd2.data.{Backend, Pd2DatabaseService}
+import pd2.data.{Backend, DatabaseService}
 import pd2.providers.TrackDto
 import pd2.providers.traxsource.{Traxsource, TraxsourceLive}
 import pd2.ui.ProgressBar.ProgressBarDimensions
@@ -64,7 +64,6 @@ object Application extends zio.App {
       _   <- clock.sleep(500.millis) *> progressFiber.interrupt
       res <- receivedDtos.map(_.sortBy(dto => (dto.artist, dto.title))).get
 
-      _   <- Files.writeLines(targetPath.parent.get / Path("received.txt"), res.map(dto => s"${dto.internalId} - ${dto.artist} - ${dto.title}"))
       _   <- putStrLn(s"\ntotal tracks: ${res.length}")
     } yield ()
 
@@ -75,7 +74,7 @@ object Application extends zio.App {
     val configLayer = Config.makeLayer("config.json", date1)
     val database =
       Backend.makeLayer(SQLiteProfile, Backend.makeSqliteLiveConfig(Path("c:\\!temp\\imported.db"))) >>>
-      Pd2DatabaseService.makeLayer(SQLiteProfile)
+      DatabaseService.makeLayer(SQLiteProfile)
     val customLayer =  traxsourceLive ++ consoleProgress ++ configLayer ++ database
 
     effect.provideCustomLayer(customLayer).exitCode

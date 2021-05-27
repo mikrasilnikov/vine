@@ -46,7 +46,7 @@ object DataImport extends zio.App {
 
     def customLayer(params : Params) =
       (Backend.makeLayer(SQLiteProfile, Backend.makeSqliteLiveConfig(params.outputPath)) >>>
-        Pd2DatabaseService.makeLayer(SQLiteProfile)) ++
+        DatabaseService.makeLayer(SQLiteProfile)) ++
       ConsoleProgressLive.makeLayer(ProgressBarDimensions(15, 60))
 
     val app = parseAndValidateParams(args)
@@ -58,11 +58,11 @@ object DataImport extends zio.App {
   }
 
   private def performImport(params : Params)
-    : ZIO[Console with Has[Pd2DatabaseService] with ConsoleProgress with Blocking with Clock, Throwable, Unit] =
+    : ZIO[Console with Has[DatabaseService] with ConsoleProgress with Blocking with Clock, Throwable, Unit] =
   {
     val batchSize = 100
 
-    ZIO.service[Pd2DatabaseService].flatMap{ db =>
+    ZIO.service[DatabaseService].flatMap{ db =>
       import db.profile.api._
 
       for {

@@ -3,7 +3,7 @@ package pd2.providers
 import org.joda.time.LocalDateTime
 import pd2.config.ConfigDescription.FilterTag
 import pd2.config.{Config, FilterTag}
-import pd2.data.{Pd2Database, Pd2DatabaseService, Track}
+import pd2.data.{Pd2Database, DatabaseService, Track}
 import zio.{Has, ZIO}
 import slick.dbio._
 
@@ -14,17 +14,26 @@ package object filters {
   type FilterEnv = Config with Pd2Database
 
   trait TrackFilter { self =>
-    /** Проверяет, подходит ли трек */
+    /** Проверяет, подходит ли трек, но не вносит никаких изменений в состояние (например, не пишет ничего в базу) */
     def check(dto : TrackDto) : ZIO[FilterEnv, Throwable, Boolean]
-    /** Если нужно, выполняет дополнительные действия после скачивания трека */
+
+    /** Проверяет, подходит ли трек, но может изменять состояние (писать в базу) */
+    def checkBeforeProcessing(dto : TrackDto) : ZIO[FilterEnv, Throwable, Boolean]
+
+    /** Если нужно, выполняет дополнительные действия после обработки трека трека */
     def done(dto : TrackDto) : ZIO[FilterEnv, Throwable, Unit]
 
-    def ++(that : TrackFilter) : TrackFilter= new TrackFilter {
+    def ++(that : TrackFilter) : TrackFilter = new TrackFilter {
       def check(dto: TrackDto): ZIO[FilterEnv, Throwable, Boolean] =
         for {
           x <- self.check(dto)
-          // TODO
-          y <- if (x) that.check(dto) else ZIO.succeed(false)
+          y <- that.check(dto)
+        } yield x && y
+
+      override def checkBeforeProcessing(dto: TrackDto): ZIO[FilterEnv, Throwable, Boolean] =
+        for {
+          x <- self.checkBeforeProcessing(dto)
+          y <- that.checkBeforeProcessing(dto)
         } yield x && y
 
       def done(dto: TrackDto): ZIO[FilterEnv, Throwable, Unit] =
@@ -34,6 +43,7 @@ package object filters {
 
   val empty = new TrackFilter {
     def check(dto: TrackDto): ZIO[Any, Throwable, Boolean] = ZIO.succeed(true)
+    def checkBeforeProcessing(dto: TrackDto): ZIO[FilterEnv, Throwable, Boolean] = ZIO.succeed(true)
     def done(dto: TrackDto): ZIO[Any, Throwable, Unit] = ZIO.succeed()
   }
 
@@ -47,15 +57,32 @@ package object filters {
         myLabel   =  labels.exists(l => l.toLowerCase == dto.label.toLowerCase)
       } yield myArtist || myLabel
     }
-
+    def checkBeforeProcessing(dto: TrackDto): ZIO[FilterEnv, Throwable, Boolean] = check(dto)
     def done(dto: TrackDto): ZIO[Config, Throwable, Unit] = ZIO.succeed()
   }
 
   val onlyNew: TrackFilter = new TrackFilter
   {
-    def check(dto: TrackDto): ZIO[Config with Pd2Database, Throwable, Boolean] =
+    def check(dto: TrackDto): ZIO[FilterEnv, Throwable, Boolean] = checkCore(dto, false)
+    def checkBeforeProcessing(dto: TrackDto): ZIO[FilterEnv, Throwable, Boolean] = checkCore(dto, true)
+
+    def done(dto: TrackDto): ZIO[Pd2Database, Throwable, Unit] =
+      ZIO.service[DatabaseService].flatMap { db =>
+        import db.profile.api._
+        for {
+          uniqueName <- dto.uniqueNameZio
+          transaction = for {
+            existing  <- db.tracks.filter(_.uniqueName === uniqueName).result
+            id        =  existing.headOption.get.id // Если его там нет, то пусть падает
+            _         <- db.tracks.filter(_.id === id).map(_.queued).update(None)
+          } yield ()
+          _ <- db.run(transaction.transactionally)
+        } yield ()
+      }
+
+    private def checkCore(dto: TrackDto, updateDb : Boolean): ZIO[Config with Pd2Database, Throwable, Boolean] =
     {
-      ZIO.service[Pd2DatabaseService].flatMap { db =>
+      ZIO.service[DatabaseService].flatMap { db =>
         import db.profile.api._
         for {
           runId <- Config.runId
@@ -66,7 +93,10 @@ package object filters {
 
             res0 <- existingTrackOpt.headOption match {
               // Ранее такого трека мы не видели.
-              case None => (db.tracks += newTrack) >> DBIO.successful(true)
+              case None =>  {
+                if (updateDb) (db.tracks += newTrack) >> DBIO.successful(true)
+                else DBIO.successful(true)
+              }
               case Some(existingTrack) =>
                 existingTrack.queued match {
                   // Такой трек раньше встречался и его уже скачали.
@@ -74,9 +104,14 @@ package object filters {
                   // Трек уже видели при текущем запуске (например, другой fiber его уже скачивает).
                   case Some(id) if id == runId  => DBIO.successful(false)
                   // Трек видели при предыдущем запуске, но не скачали. Например, из-за ошибки.
-                  case Some(_) =>
-                    db.tracks.filter(_.id === existingTrack.id).map(_.queued).update(Some(runId)) >>
-                    DBIO.successful(true) // проставляем треку текущий runId
+                  case Some(_) => {
+                    if (updateDb)
+                    // проставляем треку текущий runId
+                      db.tracks.filter(_.id === existingTrack.id).map(_.queued).update(Some(runId)) >>
+                        DBIO.successful(true)
+                    else
+                      DBIO.successful(true)
+                  }
                 }
             }
           } yield res0
@@ -85,19 +120,5 @@ package object filters {
         } yield res1
       }
     }
-
-    def done(dto: TrackDto): ZIO[Pd2Database, Throwable, Unit] =
-      ZIO.service[Pd2DatabaseService].flatMap { db =>
-        import db.profile.api._
-        for {
-          uniqueName <- dto.uniqueNameZio
-          transaction = for {
-            existing  <- db.tracks.filter(_.uniqueName === uniqueName).result
-            id        =  existing.headOption.get.id // Оно точно должно там быть
-            _         <- db.tracks.filter(_.id === id).map(_.queued).update(None)
-          } yield ()
-          _ <- db.run(transaction.transactionally)
-        } yield ()
-      }
   }
 }

@@ -20,7 +20,7 @@ object Pd2Exception {
     }
   }
 
-  case class ServiceUnavailable(message: String, inner: Option[Throwable]) extends Pd2Exception {
+  case class ServiceUnavailable(message: String, inner: Option[Throwable] = None) extends Pd2Exception {
     override val fatal: Boolean = false
   }
 

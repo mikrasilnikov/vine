@@ -5,7 +5,7 @@ import zio.{Has, Semaphore, ZIO, ZLayer}
 
 import java.time.{LocalDate, LocalDateTime}
 
-case class Pd2DatabaseService(
+case class DatabaseService(
   profile: JdbcProfile,
   override val backendDb: JdbcBackend#Database,
   override val accessSemaphore : Semaphore) extends Database {
@@ -41,12 +41,12 @@ case class Track(
   queued : Option[LocalDateTime],
   id: Int = 0)
 
-object Pd2DatabaseService {
-  def makeLayer(profile: JdbcProfile) : ZLayer[Has[JdbcBackend#Database], Nothing, Has[Pd2DatabaseService]] = {
-    val make = ZIO.service[JdbcBackend#Database].flatMap { db =>
+object DatabaseService {
+  def makeLayer(profile: JdbcProfile) : ZLayer[Has[JdbcBackend#Database], Nothing, Has[DatabaseService]] = {
+    val make = ZIO.service[JdbcBackend#Database].flatMap { backend =>
       for {
         semaphore <- Semaphore.make(1)
-      } yield Pd2DatabaseService(profile, db, semaphore)
+      } yield DatabaseService(profile, backend, semaphore)
     }
     make.toLayer
   }

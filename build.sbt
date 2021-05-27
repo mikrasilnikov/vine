@@ -14,6 +14,7 @@ libraryDependencies ++= Seq(
   "dev.zio" %% "zio-macros" % "1.0.6",
   "dev.zio" %% "zio-test"     % "1.0.6" % "test",
   "dev.zio" %% "zio-test-sbt"  % "1.0.6" % "test",
+  "com.h2database" % "h2" % "1.4.200" % "test",
   "net.java.dev.jna" % "jna" % "5.8.0",
   "net.java.dev.jna" % "jna-platform" % "5.8.0",
   "com.softwaremill.sttp.client3" %% "httpclient-backend-zio" % "3.3.1",
