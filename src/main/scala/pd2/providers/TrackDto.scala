@@ -14,21 +14,18 @@ case class TrackDto(
   feed : String,
   internalId : Int)
 {
-  val uniqueNameOpt: Option[String] = for {
-    artists <- TrackParsing.parseArtists(artist)
-    title <- TrackParsing.parseTitle(title)
-  } yield rewriteTrackName(artists, title)
+  val uniqueNameOption: Option[String] = TrackParsing.getUniqueNameOption(artist, title)
 
   val uniqueNameZio: URIO[Any, String] =
-    ZIO.fromOption(uniqueNameOpt)
-      .orDieWith(_ => new IllegalStateException(s"Could not produce uniqueNameOpt for ${artist} - ${title}"))
+    ZIO.fromOption(uniqueNameOption)
+      .orDieWith(_ => new IllegalStateException(s"Could not produce uniqueNameOption for ${artist} - ${title}"))
 
   def toDbTrack(runId : Option[LocalDateTime]) : Option[Track] = {
-    uniqueNameOpt.map(name =>
+    uniqueNameOption.map(name =>
       Track(artist, title, name, Some(label), Some(releaseDate), Some(feed), runId))
   }
 
   def toDbTrackZio(runId : Option[LocalDateTime]): URIO[Any, Track] =
     ZIO.fromOption(toDbTrack(runId))
-      .orDieWith(_ => new IllegalStateException(s"Could not produce uniqueNameOpt for ${artist} - ${title}"))
+      .orDieWith(_ => new IllegalStateException(s"Could not produce uniqueNameOption for ${artist} - ${title}"))
 }

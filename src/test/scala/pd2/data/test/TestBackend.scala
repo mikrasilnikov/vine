@@ -11,16 +11,16 @@ import java.util.concurrent.ConcurrentHashMap
 object TestBackend {
 
   @volatile
-  private var currentDbNum = 1
+  private var currentDbNum = 0
   private val connections = new ConcurrentHashMap[Int, Connection]
 
   def makeLayer : ZLayer[Any, Throwable, Has[JdbcBackend#Database]] = {
 
-    var current = 0
-    this.synchronized {
-      current = currentDbNum
-      currentDbNum += 1
-    }
+    val current =
+      this.synchronized {
+        currentDbNum += 1
+        currentDbNum
+      }
 
     val create : Task[JdbcBackend#Database] = ZIO.effect {
         println(s"Creating database db$current")

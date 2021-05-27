@@ -16,6 +16,11 @@ object TrackParsing {
 
   final case class Title(actualTitle: String, featuredArtist : Option[List[Artist]], mix: Option[String])
 
+  def getUniqueNameOption(artist: String, title: String): Option[String] = for {
+    artists <- parseArtists(artist)
+    title <- parseTitle(title)
+  } yield rewriteTrackName(artists, title)
+
   def parseArtists(s : String) : Option[List[Artist]] = artistsP.parse(s) match {
     case Right((_, result)) => Some(result.toList.map(fixPriorities))
     case _ => None
@@ -54,7 +59,7 @@ object TrackParsing {
     s"${artistNames.mkString(", ")} - ${parsedTitle.actualTitle}${parsedTitle.mix.map(" " + _).getOrElse("")}"
   }
 
-  /*
+  /**
     Рекурсивный парсер дает на выходе right-associative структуру данных, типа
       A & B & C -> Coop(A, Coop(B, C))
     В реальной жизни некоторые из таких комбинаций следует читать по-другому, например
@@ -78,7 +83,7 @@ object TrackParsing {
 
   type ActualTitle = String
   type FeaturedArtist = Artist
-  /*
+  /**
     Парсер списка исполнителей подходит и для названия трека с featured исполнителем.
     Например для
       All I Need feat. Nathalie Miranda
@@ -131,10 +136,10 @@ object TrackParsing {
 
     // </editor-fold>
 
-    /*
-  All My Life (feat. Andrea Martin, Sean Declase) ->
+    /**
+    All My Life (feat. Andrea Martin, Sean Declase) ->
     All My Life feat. Andrea Martin, Sean Declase
-*/
+  */
     def removeParenthesesAroundFeaturedBlock(s : String) : String = {
       val featBlockStart = for {
         start <- findLastParenthesesGroupStart(s)
@@ -147,7 +152,7 @@ object TrackParsing {
       }
     }
 
-    /*
+    /**
   Downtown (Louie Vega Extended Raw Dub Mix) ->
     (
       "Downtown",
@@ -172,10 +177,10 @@ object TrackParsing {
     }
 
     /*
-Пытается найти индекс символа, с которого начинается последняя группа скобок.
-Music Should Not Stop (Jonas Rathsman (PL) Remix)
-                      ^
-*/
+      Пытается найти индекс символа, с которого начинается последняя группа скобок.
+      Music Should Not Stop (Jonas Rathsman (PL) Remix)
+                            ^
+    */
     def findLastParenthesesGroupStart(s : String) : Option[Int] = {
       if (s.last == ')') {
         def loop(pos : Int, depth : Int) : Option[Int] =

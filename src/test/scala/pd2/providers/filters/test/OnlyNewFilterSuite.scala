@@ -1,11 +1,14 @@
 package pd2.providers.filters.test
 
 import pd2.data.{DatabaseService, Track}
-import pd2.data.test.{TestBackend, TestDatabaseService}
+import pd2.data.test.{TestBackend, TestDatabaseService, TrackTestDataBuilder}
 import zio.ZIO
-import zio.test.Assertion.{anything, equalTo}
+import zio.console.putStrLn
+import zio.test.Assertion.{anything, equalTo, fails, isFailure}
 import zio.test.DefaultRunnableSpec
 import zio.test.{DefaultRunnableSpec, assert}
+
+import java.time.LocalDate
 
 object OnlyNewFilterSuite extends DefaultRunnableSpec {
   override def spec =
@@ -18,16 +21,23 @@ object OnlyNewFilterSuite extends DefaultRunnableSpec {
 
           val testDbLayer = TestDatabaseService.makeLayer { db =>
             import db.profile.api._
-            db.tracks.schema.create >>
-            (db.tracks += trackInDb)
+            db.tracks.schema.create
           }
 
+          val trackBuilder = TrackTestDataBuilder.empty
+            .withArtist("Sandy Rivera")
+            .withTitle("I Can't Stop")
+            .withLabel("Underwater")
+            .withReleaseDate(LocalDate.parse("2003-05-26"))
+
           val reader = for {
-            actual <- ZIO.service[DatabaseService].flatMap { db =>
-              import db.profile.api._
-              db.run(db.tracks.take(1).result).map(_.head)
-            }
-          } yield assert(actual)(equalTo(trackInDb))
+            expected  <- trackBuilder.build
+            _         <- putStrLn(expected.toString)
+            actual    <- ZIO.service[DatabaseService].flatMap { db =>
+                          import db.profile.api._
+                          db.run(db.tracks.take(1).result).map(_.head)
+                        }
+          } yield assert(actual)(equalTo(expected))
 
           reader.provideCustomLayer(TestBackend.makeLayer >>> testDbLayer)
         }
