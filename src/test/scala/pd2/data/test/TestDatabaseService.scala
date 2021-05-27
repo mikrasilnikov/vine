@@ -8,17 +8,18 @@ import zio.{Has, Semaphore, ZIO, ZLayer}
 import scala.concurrent.ExecutionContext.global
 
 object TestDatabaseService {
-  def makeLayer[R](populateDb: DatabaseService => DBIOAction[R, NoStream, Effect.All])
-  : ZLayer[Has[JdbcBackend#Database], Throwable, Has[DatabaseService]] = {
+  def makeLayer : ZLayer[Has[JdbcBackend#Database], Throwable, Has[DatabaseService]] = {
     val make = ZIO.service[JdbcBackend#Database].flatMap { backend =>
       for {
         semaphore <- Semaphore.make(1)
       } yield DatabaseService(slick.jdbc.H2Profile, backend, semaphore)
     }
 
-    (for {
-      res <- make
-      _   <- res.run(populateDb(res))
-    } yield res).toLayer
+    make.flatMap { db =>
+      import db.profile.api._
+      db.run {
+        db.tracks.schema.create
+      }.as(db)
+    }.toLayer
   }
 }
