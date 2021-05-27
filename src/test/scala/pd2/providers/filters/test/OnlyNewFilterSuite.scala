@@ -17,15 +17,13 @@ object OnlyNewFilterSuite extends DefaultRunnableSpec {
       suite("Parsing")(
         testM("1") {
 
-          val trackInDb = Track("Artist", "Title", "Artist - Title", None, None, None, None)
-
           val trackBuilder = TrackTestDataBuilder.empty
             .withArtist("Sandy Rivera")
             .withTitle("I Can't Stop")
             .withLabel("Underwater")
             .withReleaseDate(LocalDate.parse("2003-05-26"))
 
-          val reader = for {
+          val test = for {
             expected  <- trackBuilder.build
             _         <- putStrLn(expected.toString)
             actual    <- ZIO.service[DatabaseService].flatMap { db =>
@@ -34,13 +32,11 @@ object OnlyNewFilterSuite extends DefaultRunnableSpec {
                         }
           } yield assert(actual)(equalTo(expected))
 
-          reader.provideCustomLayer(
+          test.provideCustomLayer(
             TestBackend.makeLayer >>> TestDatabaseService.makeLayer)
         },
 
         testM("2") {
-
-          val trackInDb = Track("Artist", "Title", "Artist - Title", None, None, None, None)
 
           val trackBuilder = TrackTestDataBuilder.empty
             .withArtist("Sandy Rivera")
@@ -48,7 +44,7 @@ object OnlyNewFilterSuite extends DefaultRunnableSpec {
             .withLabel("Underwater")
             .withReleaseDate(LocalDate.parse("2003-05-26"))
 
-          val reader = for {
+          val test = for {
             expected  <- trackBuilder.build
             _         <- putStrLn(expected.toString)
             actual    <- ZIO.service[DatabaseService].flatMap { db =>
@@ -57,7 +53,7 @@ object OnlyNewFilterSuite extends DefaultRunnableSpec {
             }
           } yield assert(actual)(equalTo(expected))
 
-          reader.provideCustomLayer(
+          test.provideCustomLayer(
             TestBackend.makeLayer >>> TestDatabaseService.makeLayer)
         }
       )
