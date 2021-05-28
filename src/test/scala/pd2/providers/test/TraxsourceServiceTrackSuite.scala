@@ -1,7 +1,7 @@
 package pd2.providers.test
 
-import pd2.providers.TraxsourceServiceTrack
-import pd2.providers.TraxsourceServiceTrack.{TraxsourceServiceArtist, TraxsourceServiceLabel}
+import pd2.providers.traxsource.TraxsourceServiceTrack.{TraxsourceServiceArtist, TraxsourceServiceLabel}
+import pd2.providers.traxsource.TraxsourceServiceTrack
 import sttp.model.Uri
 import zio.ZIO
 import zio.console.putStrLn

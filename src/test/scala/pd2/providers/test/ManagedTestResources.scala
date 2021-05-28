@@ -2,7 +2,7 @@ package pd2.providers.test
 
 import net.ruippeixotog.scalascraper.browser.JsoupBrowser
 import net.ruippeixotog.scalascraper.browser.JsoupBrowser.JsoupDocument
-import pd2.providers.test.TraxsourceWebPageSuite.getClass
+import pd2.providers.test.TraxsourcePageSuite.getClass
 import zio.{ZIO, ZManaged}
 
 import scala.io.Source

@@ -1,23 +1,23 @@
-package pd2.providers
+package pd2.providers.traxsource
 
 import net.ruippeixotog.scalascraper.browser.JsoupBrowser
 import net.ruippeixotog.scalascraper.dsl.DSL._
 import net.ruippeixotog.scalascraper.model.Document
 import net.ruippeixotog.scalascraper.scraper.ContentExtractors.{attr, attrs, element, elements}
 import pd2.providers.Pd2Exception._
-import pd2.providers.TraxsourceWebPage.{Absent, Present, TraxsourcePager}
+import pd2.providers.traxsource.TraxsourcePage.{Absent, Present, TraxsourcePager}
 
 import scala.util.{Failure, Success, Try}
 
 
-final case class TraxsourceWebPage(pager : TraxsourcePager, trackIds : List[Int]) {
+final case class TraxsourcePage(pager: TraxsourcePager, trackIds: List[Int]) {
   val remainingPages: List[Int] = pager match {
     case Absent => Nil
     case Present(current, last) => (current + 1 to last).toList
   }
 }
 
-object TraxsourceWebPage {
+object TraxsourcePage {
 
   private val browser = new JsoupBrowser()
 
@@ -25,7 +25,7 @@ object TraxsourceWebPage {
   case object Absent extends TraxsourcePager
   final case class Present(currentPage : Int, lastPage : Int) extends TraxsourcePager
 
-  private[providers] def parse(html: String) : Either[UnexpectedServiceResponse, TraxsourceWebPage] =
+  private[providers] def parse(html: String) : Either[UnexpectedServiceResponse, TraxsourcePage] =
   {
     val tryDoc = Try { browser.parseString(html) }
 
@@ -35,7 +35,7 @@ object TraxsourceWebPage {
     }
   }
 
-  private[providers] def readDocument(html: String, doc: Document) : Either[UnexpectedServiceResponse, TraxsourceWebPage] =
+  private[providers] def readDocument(html: String, doc: Document) : Either[UnexpectedServiceResponse, TraxsourcePage] =
   {
     val trackListDiv = doc >?> element("div.trk-list-cont")
 
@@ -55,7 +55,7 @@ object TraxsourceWebPage {
     pagerEither.map { pager =>
       val tracklistDiv = doc >> elements("div.play-trk") >> attrs("data-trid")
       val trackIds = tracklistDiv.map(_.toInt).toList
-      TraxsourceWebPage(pager, trackIds)
+      TraxsourcePage(pager, trackIds)
     }
   }
 }

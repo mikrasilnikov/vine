@@ -6,7 +6,7 @@ import pd2.data.{Pd2Database, DatabaseService}
 import pd2.helpers.Conversions.EitherToZio
 import pd2.providers.Pd2Exception.{InternalConfigurationError, ServiceUnavailable, TraxsourceBadContentLength}
 import pd2.providers.filters.{FilterEnv, TrackFilter}
-import pd2.providers.{Pd2Exception, TrackDto, TraxsourceServiceTrack, TraxsourceWebPage}
+import pd2.providers.{Pd2Exception, TrackDto}
 import pd2.ui.consoleprogress.ConsoleProgress
 import pd2.ui.consoleprogress.ConsoleProgress.ProgressItem
 import sttp.client3
@@ -42,7 +42,7 @@ case class TraxsourceLive(
   {
     for {
       firstPageProgress <- consoleProgress.acquireProgressItem(feed.name)
-      firstPagePromise  <- Promise.make[Nothing, TraxsourceWebPage]
+      firstPagePromise  <- Promise.make[Nothing, TraxsourcePage]
       firstPageFiber    <- processTracklistPage(feed, dateFrom, dateTo, 1, filter, processTrack,
                                                 firstPageProgress, Some(firstPagePromise)).fork
       firstPage         <- firstPagePromise.await
@@ -62,7 +62,7 @@ case class TraxsourceLive(
     filter           : TrackFilter,
     processTrack     : (TrackDto, Array[Byte]) => ZIO[R, E, Unit],
     pageProgressItem : ProgressItem,
-    pagePromiseOption: Option[Promise[Nothing, TraxsourceWebPage]])
+    pagePromiseOption: Option[Promise[Nothing, TraxsourcePage]])
   : ZIO[R with FilterEnv with Clock, Throwable, Unit] =
   {
     for {
@@ -84,12 +84,12 @@ case class TraxsourceLive(
   }
 
   private def getTracklistWebPage(feed : TraxsourceFeed, dateFrom : LocalDate, dateTo : LocalDate, page: Int = 1)
-  : ZIO[Clock, Pd2Exception, TraxsourceWebPage] =
+  : ZIO[Clock, Pd2Exception, TraxsourcePage] =
   {
     for {
       pageReq   <- buildTraxsourcePageRequest(feed.urlTemplate, dateFrom, dateTo, page).toZio
       pageResp  <- performTraxsourceRequest(pageReq).map(bytes => new String(bytes, StandardCharsets.UTF_8))
-      page      <- TraxsourceWebPage.parse(pageResp).toZio
+      page      <- TraxsourcePage.parse(pageResp).toZio
     } yield page
   }
 

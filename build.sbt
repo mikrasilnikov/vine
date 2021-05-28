@@ -26,3 +26,5 @@ libraryDependencies ++= Seq(
 )
 
 scalacOptions += "-Ymacro-annotations"
+
+testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework")

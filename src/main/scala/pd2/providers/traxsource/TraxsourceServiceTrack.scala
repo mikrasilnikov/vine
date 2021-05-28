@@ -1,15 +1,15 @@
-package pd2.providers
+package pd2.providers.traxsource
 
+import io.circe
+import io.circe.Decoder.Result
 import io.circe.{CursorOp, Decoder, HCursor}
+import pd2.providers.Pd2Exception.UnexpectedServiceResponse
+import pd2.providers.traxsource.TraxsourceServiceTrack.{TraxsourceServiceArtist, TraxsourceServiceLabel}
+import pd2.providers.{Pd2Exception, TrackDto}
+import sttp.model.Uri
 
 import java.time.LocalDate
 import scala.util.{Failure, Success, Try}
-import io.circe
-import io.circe.Decoder.Result
-import io.circe.generic.semiauto.deriveDecoder
-import pd2.providers.Pd2Exception.UnexpectedServiceResponse
-import pd2.providers.TraxsourceServiceTrack.{TraxsourceServiceArtist, TraxsourceServiceLabel}
-import sttp.model.Uri
 
 final case class TraxsourceServiceTrack(
   feed : String,
@@ -82,7 +82,7 @@ object TraxsourceServiceTrack {
       } yield TraxsourceServiceLabel(id, name, webName)
   }
 
-  implicit val traxsourceServiceUriDecoder : Decoder[Uri] = new Decoder[Uri] {
+  implicit val uriDecoder : Decoder[Uri] = new Decoder[Uri] {
     override def apply(c: HCursor): Result[Uri] = for {
       t <- c.value.as[String]
     } yield Uri.parse(t).getOrElse(???)
