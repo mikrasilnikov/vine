@@ -2,7 +2,7 @@ package pd2.providers.traxsource
 
 import pd2.config.ConfigDescription.Feed.TraxsourceFeed
 import pd2.config.FilterTag
-import pd2.data.{Database, Pd2Database, DatabaseService}
+import pd2.data.{Pd2Database, DatabaseService}
 import pd2.helpers.Conversions.EitherToZio
 import pd2.providers.Pd2Exception.{InternalConfigurationError, ServiceUnavailable, TraxsourceBadContentLength}
 import pd2.providers.filters.{FilterEnv, TrackFilter}

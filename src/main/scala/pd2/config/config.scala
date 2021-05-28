@@ -21,12 +21,12 @@ package object config {
   object Config {
 
     trait Service {
-      val configDescription : ConfigDescription
-      val myArtists         : List[String]
-      val myLabels          : List[String]
-      val shitLabels        : List[String]
-      val targetPath        : Path
-      val runId             : LocalDateTime
+      def configDescription : ConfigDescription
+      def myArtists         : List[String]
+      def myLabels          : List[String]
+      def shitLabels        : List[String]
+      def targetPath        : Path
+      def runId             : LocalDateTime
     }
 
     def makeLayer(fileName : String, date : LocalDate) : ZLayer[Console with Blocking, Throwable, Config] = {
@@ -62,5 +62,6 @@ package object config {
 
       make.toLayer
     }
+
   }
 }

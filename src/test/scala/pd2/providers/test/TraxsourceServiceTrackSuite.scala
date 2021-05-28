@@ -29,8 +29,8 @@ object TraxsourceServiceTrackSuite extends DefaultRunnableSpec with ManagedTestR
             "ITC2DI399B",
             333,
             LocalDate.of(2018, 1, 12),
-            Uri("https://geo-static.traxsource.com/files/images/6e91e80f5f8438dbc3cf494de276497b.jpg"),
-            Uri("https://geo-preview.traxsource.com/files/previews/9303/914d5e510aa1c7eda4b994411a17f5b5.mp3?ps=120"),
+            Uri.parse("https://geo-static.traxsource.com/files/images/6e91e80f5f8438dbc3cf494de276497b.jpg").right.get,
+            Uri.parse("https://geo-preview.traxsource.com/files/previews/9303/914d5e510aa1c7eda4b994411a17f5b5.mp3?ps=120").right.get,
             "G#min"
           )
 

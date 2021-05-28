@@ -90,7 +90,7 @@ package object filters {
 
           transaction = for {
             existingTrackOpt <- db.tracks.filter(t => t.uniqueName === newTrack.uniqueName).result
-
+            //_ <- DBIO.successful(println(existingTrackOpt))
             res0 <- existingTrackOpt.headOption match {
               // Ранее такого трека мы не видели.
               case None =>  {
@@ -106,9 +106,8 @@ package object filters {
                   // Трек видели при предыдущем запуске, но не скачали. Например, из-за ошибки.
                   case Some(_) => {
                     if (updateDb)
-                    // проставляем треку текущий runId
-                      db.tracks.filter(_.id === existingTrack.id).map(_.queued).update(Some(runId)) >>
-                        DBIO.successful(true)
+                      // проставляем треку текущий runId
+                      db.tracks.filter(_.id === existingTrack.id).map(_.queued).update(Some(runId)) >> DBIO.successful(true)
                     else
                       DBIO.successful(true)
                   }

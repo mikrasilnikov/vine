@@ -1,6 +1,10 @@
 package pd2.helpers
 
+import slick.dbio.{Effect, NoStream}
+import slick.lifted.{Query, Rep}
 import zio.{IO, ZIO}
+
+import scala.concurrent.ExecutionContext.global
 
 object Conversions {
 

@@ -36,7 +36,7 @@ case class TrackTestDataBuilder(
     val resLabel      = label.fold[Option[String]](Some(genString[Track]("Label")))(identity)
     val resReleaseDate= releaseDate.fold[Option[LocalDate]](Some(LocalDate.parse("2020-01-01")))(identity)
     val resFeed       = feed.fold[Option[String]](Some(genString[Track]("Feed")))(identity)
-    val resQueued     = None
+    val resQueued     = queued.fold[Option[LocalDateTime]](None)(identity)
 
     val entity = Track(resArtist, resTitle, resUniqueName, resLabel, resReleaseDate, resFeed, resQueued)
 

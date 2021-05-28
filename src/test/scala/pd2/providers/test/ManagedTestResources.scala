@@ -14,11 +14,4 @@ trait ManagedTestResources {
       ZIO.effect(Source.fromURL(getClass.getResource(name))))(
       source => ZIO.effectTotal(source.close()))
         .map(s => s.getLines().mkString("\n"))
-
-/*  protected def loadJsoupManaged(name : String): ZManaged[Any, Throwable, JsoupDocument] =
-    loadTextFileManaged(name)
-      .map { s =>
-        val browser = new JsoupBrowser()
-        browser.parseString(s)
-      }*/
 }
