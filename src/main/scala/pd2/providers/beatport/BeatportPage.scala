@@ -7,9 +7,11 @@ import net.ruippeixotog.scalascraper.browser.JsoupBrowser
 import net.ruippeixotog.scalascraper.browser.JsoupBrowser.JsoupDocument
 import net.ruippeixotog.scalascraper.dsl.DSL._
 import net.ruippeixotog.scalascraper.scraper.ContentExtractors.{element, elements}
+import pd2.providers.{Pager, TrackDto}
 import pd2.providers.Pd2Exception.UnexpectedServiceResponse
 import sttp.model.Uri
-import java.time.Duration
+
+import java.time.{Duration, LocalDate}
 import scala.util.{Failure, Success, Try}
 
 case class BeatportPageArtist(id : Int, name : String, slug : String)
@@ -21,14 +23,30 @@ case class BeatportPageTrack(
   name        : String,
   mix         : String,
   release     : String,
+  releaseDate : LocalDate,
   label       : String,
   duration    : Option[Duration],
   previewUrl  : Uri,
   key         : Option[String]
-)
+) {
+  def toTrackDto(feed : String) : TrackDto = TrackDto(
+    artists.map(_.name).mkString(", "),
+    if (mix.isBlank) name else s"$name ($mix)",
+    label,
+    releaseDate,
+    feed,
+    id)
+}
 
-case class BeatportPager(currentPage : Int, totalPages : Int)
-case class BeatportPage(pager : Option[BeatportPager], tracks : List[BeatportPageTrack])
+
+
+
+case class BeatportPage(pager : Option[Pager], tracks : List[BeatportPageTrack]) {
+  val remainingPages: List[Int] = pager match {
+    case None => Nil
+    case Some(Pager(current, total)) => (current + 1 to total).toList
+  }
+}
 
 object BeatportPage {
   private val browser = new JsoupBrowser()
@@ -78,13 +96,13 @@ object BeatportPage {
     }
   }
 
-  private def parsePager(doc : JsoupDocument) : Either[UnexpectedServiceResponse, Option[BeatportPager]] = {
+  private def parsePager(doc : JsoupDocument) : Either[UnexpectedServiceResponse, Option[Pager]] = {
     doc >?> element("div.pag-numbers") match {
       case None => Right(None)
       case Some(el) =>
         val currentPg = (el >> element("strong.pag-number-current")).text.toInt
         val lastPg = (el >> elements(".pag-number")).last.text.toInt
-        Right(Some(BeatportPager(currentPg, lastPg)))
+        Right(Some(Pager(currentPg, lastPg)))
     }
   }
 
@@ -98,11 +116,12 @@ object BeatportPage {
         name        <- c.downField("name").as[String]
         mix         <- c.downField("mix").as[String]
         release     <- c.downField("release").downField("name").as[String]
+        releaseDate <- c.downField("date").downField("released").as[LocalDate]
         label       <- c.downField("label").downField("name").as[String]
         duration    <- c.downField("duration").downField("milliseconds").as[Option[Int]]
                         .map(mso => mso.map(ms => Duration.ofMillis(ms)))
         previewUrl  <- c.downField("preview").downField("mp3").downField("url").as[Uri]
         key         <- c.downField("key").as[Option[String]]
-      } yield BeatportPageTrack(id, artists, title, name, mix, release, label, duration, previewUrl, key)
+      } yield BeatportPageTrack(id, artists, title, name, mix, release, releaseDate, label, duration, previewUrl, key)
   }
 }

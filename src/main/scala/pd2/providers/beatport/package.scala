@@ -1,25 +1,22 @@
 package pd2.providers
 
-import pd2.config.ConfigDescription.Feed.TraxsourceFeed
-import pd2.config.FilterTag
-import pd2.providers.filters.{FilterEnv, TrackFilter}
-import pd2.providers.{Pd2Exception, TrackDto}
-import zio.clock.Clock
+import pd2.config.ConfigDescription.Feed.BeatportFeed
+import pd2.providers.filters._
 import zio.{Has, ZIO}
+import zio.clock.Clock
 import zio.macros.accessible
 
 import java.time.LocalDate
 
-package object traxsource {
-
-  type Traxsource = Has[Traxsource.Service]
+package object beatport {
+  type Beatport = Has[Beatport.Service]
 
   @accessible
-  object Traxsource
+  object Beatport
   {
-    trait Service extends WebDataProvider[TraxsourceFeed] {
+    trait Service extends WebDataProvider[BeatportFeed] {
       def processTracks[R, E <: Throwable](
-        feed        : TraxsourceFeed,
+        feed        : BeatportFeed,
         dateFrom    : LocalDate,
         dateTo      : LocalDate,
         filter      : TrackFilter,

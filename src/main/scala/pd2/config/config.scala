@@ -1,6 +1,6 @@
 package pd2
 import zio.blocking.Blocking
-import zio.{Has, ZIO, ZLayer}
+import zio.{Has, Semaphore, ZIO, ZLayer}
 import zio.macros.accessible
 import zio.nio.core.file.Path
 import zio.nio.file.Files
@@ -21,15 +21,16 @@ package object config {
   object Config {
 
     trait Service {
-      def configDescription : ConfigDescription
-      def myArtists         : List[String]
-      def myLabels          : List[String]
-      def shitLabels        : List[String]
-      def targetPath        : Path
-      def runId             : LocalDateTime
+      def configDescription   : ConfigDescription
+      def myArtists           : List[String]
+      def myLabels            : List[String]
+      def shitLabels          : List[String]
+      def targetPath          : Path
+      def runId               : LocalDateTime
+      def globalConnSemaphore : Semaphore
     }
 
-    def makeLayer(fileName : String, date : LocalDate) : ZLayer[Console with Blocking, Throwable, Config] = {
+    def makeLayer(fileName : String, date : LocalDate, globalConnectionsLimit : Int) : ZLayer[Console with Blocking, Throwable, Config] = {
 
       val make = for {
         _           <- putStrLn(s"Loading config from $fileName...")
@@ -50,6 +51,7 @@ package object config {
                           (list, fName) => Files.readAllLines(jarPath / Path(fName)).map(list ++ _))
         _           <- putStrLn(s"Loaded ${shit.length} shit labels")
         localDt     <- ZIO.succeed(LocalDateTime.now())
+        gSemaphore  <- Semaphore.make(globalConnectionsLimit)
 
       } yield new Service {
         val configDescription: ConfigDescription = description
@@ -58,6 +60,7 @@ package object config {
         val shitLabels: List[String] = shit
         val targetPath: Path = jarPath / Path(description.previewsFolder.replace("{0}", date.toString))
         val runId : LocalDateTime = localDt
+        val globalConnSemaphore : Semaphore = gSemaphore
       }
 
       make.toLayer

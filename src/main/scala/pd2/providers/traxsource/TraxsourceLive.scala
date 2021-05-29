@@ -1,8 +1,7 @@
 package pd2.providers.traxsource
 
+import pd2.config.Config
 import pd2.config.ConfigDescription.Feed.TraxsourceFeed
-import pd2.config.FilterTag
-import pd2.data.{Pd2Database, DatabaseService}
 import pd2.helpers.Conversions.EitherToZio
 import pd2.providers.Pd2Exception.{InternalConfigurationError, ServiceUnavailable, TraxsourceBadContentLength}
 import pd2.providers.filters.{FilterEnv, TrackFilter}
@@ -23,14 +22,11 @@ import java.time.LocalDate
 case class TraxsourceLive(
   consoleProgress     : ConsoleProgress.Service,
   sttpClient          : SttpClient.Service,
-  connectionsSemaphore: Semaphore)
+  providerSemaphore   : Semaphore,
+  globalSemaphore     : Semaphore)
   extends Traxsource.Service
 {
-  type SttpRequest = RequestT[client3.Identity, Either[String, Array[Byte]], Any]
-
-  private val traxsourceBasicRequest = basicRequest
-    .header(HeaderNames.UserAgent, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.61 Safari/537.36")
-    .readTimeout(concurrent.duration.Duration(30, concurrent.duration.SECONDS))
+  private val traxsourceHost = "https://www.traxsource.com"
 
   override def processTracks[R , E <: Throwable](
       feed          : TraxsourceFeed,
@@ -87,8 +83,8 @@ case class TraxsourceLive(
   : ZIO[Clock, Pd2Exception, TraxsourcePage] =
   {
     for {
-      pageReq   <- buildTraxsourcePageRequest(feed.urlTemplate, dateFrom, dateTo, page).toZio
-      pageResp  <- performTraxsourceRequest(pageReq).map(bytes => new String(bytes, StandardCharsets.UTF_8))
+      pageReq   <- buildPageRequest(traxsourceHost, feed.urlTemplate, dateFrom, dateTo, page).toZio
+      pageResp  <- performRequest(pageReq).map(bytes => new String(bytes, StandardCharsets.UTF_8))
       page      <- TraxsourcePage.parse(pageResp).toZio
     } yield page
   }
@@ -98,7 +94,7 @@ case class TraxsourceLive(
   {
     for {
       serviceReq  <- buildTraxsourceServiceRequest(trackIds).toZio
-      serviceResp <- performTraxsourceRequest(serviceReq).map(bytes => new String(bytes, StandardCharsets.UTF_8))
+      serviceResp <- performRequest(serviceReq).map(bytes => new String(bytes, StandardCharsets.UTF_8))
       tracks      <- TraxsourceServiceTrack.fromServiceResponse(serviceResp, feed).toZio
     } yield tracks
   }
@@ -106,38 +102,9 @@ case class TraxsourceLive(
   private def downloadTrack(trackUri : Uri) : ZIO[Clock, Pd2Exception, Array[Byte]] =
   {
     for {
-      request <- ZIO.succeed(buildTraxsourceTrackRequest(trackUri))
-      bytes   <- performTraxsourceRequest(request)
+      request <- ZIO.succeed(providerBasicRequest.get(trackUri).response(asByteArray))
+      bytes   <- performRequest(request)
     } yield bytes
-  }
-
-  private[providers] def buildTraxsourcePageRequest(
-    urlTemplate : String,
-    dateFrom    : LocalDate,
-    dateTo      : LocalDate,
-    page        : Int = 1)
-  : Either[Pd2Exception, SttpRequest] =
-  {
-    val domain = "https://traxsource.com"
-
-    val pageParam = if (page != 1) s"&page=$page" else ""
-
-    val uriStr =
-      domain ++
-        urlTemplate
-          .replace("{0}", dateFrom.toString)
-          .replace("{1}", dateTo.toString) ++
-        pageParam
-
-    val eitherRequest = for {
-      uri <- Uri.parse(uriStr)
-    } yield
-      traxsourceBasicRequest
-        .get(uri)
-        .response(asByteArray)
-
-    eitherRequest
-      .left.map(msg => InternalConfigurationError(msg))
   }
 
   private def buildTraxsourceServiceRequest(trackIds : List[Int]) : Either[Pd2Exception, SttpRequest] =
@@ -147,43 +114,19 @@ case class TraxsourceLive(
     val eitherRequest = for {
       uri <- Uri.parse(uriStr)
     } yield
-      traxsourceBasicRequest
+      providerBasicRequest
         .get(uri)
         .response(asByteArray)
 
     eitherRequest.left.map(msg => InternalConfigurationError(msg))
   }
-
-  private def buildTraxsourceTrackRequest(uri : Uri) : SttpRequest =
-  {
-    traxsourceBasicRequest
-      .get(uri)
-      .response(asByteArray)
-  }
-
-  private def performTraxsourceRequest(request : SttpRequest) : ZIO[Clock, Pd2Exception, Array[Byte]] =
-  {
-    for {
-      response            <- connectionsSemaphore.withPermit(
-                                  sttpClient.send(request).timeoutFail(ServiceUnavailable("Timeout"))(60.second))
-                                .mapError(e => ServiceUnavailable(request.uri.toString() ++ "\n" ++ e.getMessage, Some(e)))
-                                .retry(
-                                  Schedule.recurWhile[ServiceUnavailable](_ => true) &&
-                                  Schedule.recurs(10) &&
-                                  Schedule.spaced(5.seconds))
-      contentLengthOption =  response.headers.find(_.name == HeaderNames.ContentLength).map(_.value.toInt)
-      body                <- response.body.toZio.mapError(s => ServiceUnavailable(s, None))
-      _                   <- ZIO.fail(TraxsourceBadContentLength("Bad content length"))
-                              .unless(contentLengthOption.forall(_ == body.length))
-    } yield body
-  }
 }
 
 object TraxsourceLive {
-  def makeLayer(maxConcurrentConnections : Int): ZLayer[ConsoleProgress with SttpClient, Nothing, Traxsource] =
-    ZLayer.fromServicesM[ConsoleProgress.Service, SttpClient.Service, Any, Nothing, Traxsource.Service] {
-    case (consoleProgress, sttpClient) => for {
-      connectionsSemaphore <- Semaphore.make(maxConcurrentConnections)
-    } yield TraxsourceLive(consoleProgress, sttpClient, connectionsSemaphore)
+  def makeLayer(maxConcurrentConnections : Int): ZLayer[Config with ConsoleProgress with SttpClient, Nothing, Traxsource] =
+    ZLayer.fromServicesM[Config.Service, ConsoleProgress.Service, SttpClient.Service, Any, Nothing, Traxsource.Service] {
+    case (config, consoleProgress, sttpClient) => for {
+      providerSemaphore <- Semaphore.make(maxConcurrentConnections)
+    } yield TraxsourceLive(consoleProgress, sttpClient, providerSemaphore, config.globalConnSemaphore)
   }
 }
