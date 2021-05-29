@@ -8,10 +8,10 @@ import zio.test.DefaultRunnableSpec
 
 object AllTests extends DefaultRunnableSpec  {
   override def spec = suite("All tests") (
-    TrackSuite.spec,
+    /*TrackSuite.spec,
     ProgressBarSuite.spec,
     TraxsourcePageSuite.spec,
     TraxsourceServiceTrackSuite.spec,
-    OnlyNewFilterSuite.spec
+    OnlyNewFilterSuite.spec*/
   )
 }
