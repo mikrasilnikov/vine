@@ -47,13 +47,15 @@ object Application extends zio.App {
 
     def processTrack(trackDto: TrackDto, data : Array[Byte]): ZIO[Blocking with Config, Throwable, Unit] =
       for {
-        targetPath    <- Config.targetPath
+        previewsBase  <- Config.targetPath
+        feedPath     =  previewsBase / Path(trackDto.feed)
+        _             <- Files.createDirectory(feedPath).whenM(Files.notExists(feedPath))
         fileName      =  s"${fixPath(trackDto.artist)} - ${fixPath(trackDto.title)}.mp3"
-        _             <- Files.writeBytes(targetPath / Path(fileName), Chunk.fromArray(data))
+        _             <- Files.writeBytes(feedPath / Path(fileName), Chunk.fromArray(data))
     } yield ()
 
-    val date1 = LocalDate.parse("2021-05-29")
-    val date2 = LocalDate.parse("2021-05-29")
+    val date1 = LocalDate.parse("2021-05-01")
+    val date2 = LocalDate.parse("2021-05-02")
 
     val effect = for {
       targetPath    <- Config.targetPath

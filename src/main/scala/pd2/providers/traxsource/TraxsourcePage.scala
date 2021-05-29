@@ -47,7 +47,10 @@ object TraxsourcePage {
 
     pagerEither.map { pager =>
       val tracklistDiv = doc >> elements("div.play-trk") >> attrs("data-trid")
-      val trackIds = tracklistDiv.map(_.toInt).toList
+      val trackIds = tracklistDiv
+        .filter(_.nonEmpty) // Бывают страницы, на которых есть битый элемент в списке, с пустым атрибутом
+        .map(_.toInt)
+        .toList
       TraxsourcePage(pager, trackIds)
     }
   }
