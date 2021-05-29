@@ -5,13 +5,27 @@ import net.ruippeixotog.scalascraper.browser.JsoupBrowser.JsoupDocument
 import pd2.providers.test.TraxsourcePageSuite.getClass
 import zio.{ZIO, ZManaged}
 
-import scala.io.Source
+import java.io.BufferedInputStream
+import java.util.zip.{ZipFile, ZipInputStream}
+import scala.io.{Codec, Source}
 
 trait ManagedTestResources {
 
   protected def loadTextFileManaged(name : String) : ZManaged[Any, Throwable, String] =
     ZManaged.make(
-      ZIO.effect(Source.fromURL(getClass.getResource(name))))(
+      ZIO.effect {
+        val zipStream = new ZipInputStream(getClass.getResourceAsStream(name))
+        val entry = zipStream.getNextEntry
+        val buf = new Array[Byte](entry.getSize.toInt)
+
+        var off = 0
+        while (off < buf.length - 1) {
+          val bytesRead = zipStream.read(buf, off, buf.size - off)
+          off += bytesRead
+        }
+
+        Source.fromBytes(buf)(Codec.UTF8)
+      })(
       source => ZIO.effectTotal(source.close()))
-        .map(s => s.getLines().mkString("\n"))
+        .map { s =>s.getLines().mkString("\n") }
 }

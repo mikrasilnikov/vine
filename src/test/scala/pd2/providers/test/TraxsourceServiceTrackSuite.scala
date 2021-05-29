@@ -34,7 +34,7 @@ object TraxsourceServiceTrackSuite extends DefaultRunnableSpec with ManagedTestR
             "G#min"
           )
 
-          loadTextFileManaged("/Traxsource_ServiceResponse.xml")
+          loadTextFileManaged("/Traxsource_ServiceResponse.xml.zip")
             .use { doc => ZIO.fromEither(TraxsourceServiceTrack.fromServiceResponse(doc, "03-traxsource-soulful-all"))
               .tapError(e => putStrLn(e.toString)) }
             .map(res => assert(res)(equalTo(List(expected))))
