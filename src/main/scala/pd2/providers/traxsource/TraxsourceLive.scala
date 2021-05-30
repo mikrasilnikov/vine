@@ -1,7 +1,7 @@
 package pd2.providers.traxsource
 
 import pd2.config.Config
-import pd2.config.ConfigDescription.Feed.TraxsourceFeed
+import pd2.config.ConfigDescription.Feed
 import pd2.helpers.Conversions.EitherToZio
 import pd2.providers.Pd2Exception.{InternalConfigurationError, ServiceUnavailable, TraxsourceBadContentLength}
 import pd2.providers.filters.{FilterEnv, TrackFilter}
@@ -29,7 +29,7 @@ case class TraxsourceLive(
   private val traxsourceHost = "https://www.traxsource.com"
 
   override def processTracks[R , E <: Throwable](
-      feed          : TraxsourceFeed,
+      feed          : Feed,
       dateFrom      : LocalDate,
       dateTo        : LocalDate,
       filter        : TrackFilter,
@@ -51,7 +51,7 @@ case class TraxsourceLive(
   }
 
   private def processTracklistPage[R, E <: Throwable](
-    feed             : TraxsourceFeed,
+    feed             : Feed,
     dateFrom         : LocalDate,
     dateTo           : LocalDate,
     pageNum          : Int,
@@ -79,7 +79,7 @@ case class TraxsourceLive(
     } yield ()
   }
 
-  private def getTracklistWebPage(feed : TraxsourceFeed, dateFrom : LocalDate, dateTo : LocalDate, page: Int = 1)
+  private def getTracklistWebPage(feed : Feed, dateFrom : LocalDate, dateTo : LocalDate, page: Int = 1)
   : ZIO[Clock, Pd2Exception, TraxsourcePage] =
   {
     for {

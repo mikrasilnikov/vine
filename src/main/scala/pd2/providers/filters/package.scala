@@ -2,10 +2,12 @@ package pd2.providers
 
 import org.joda.time.LocalDateTime
 import pd2.config.ConfigDescription.FilterTag
-import pd2.config.{Config, FilterTag}
-import pd2.data.{Pd2Database, DatabaseService, Track}
+import pd2.config.Config
+import pd2.data.{DatabaseService, Pd2Database, Track}
 import zio.{Has, ZIO}
 import slick.dbio._
+
+import java.time.Duration
 
 package object filters {
 
@@ -41,13 +43,13 @@ package object filters {
     }
   }
 
-  val empty = new TrackFilter {
+  val empty : TrackFilter = new TrackFilter {
     def check(dto: TrackDto): ZIO[Any, Throwable, Boolean] = ZIO.succeed(true)
     def checkBeforeProcessing(dto: TrackDto): ZIO[FilterEnv, Throwable, Boolean] = ZIO.succeed(true)
     def done(dto: TrackDto): ZIO[Any, Throwable, Unit] = ZIO.succeed()
   }
 
-  val my = new TrackFilter {
+  val my  : TrackFilter = new TrackFilter {
     def check(dto: TrackDto): ZIO[Config, Throwable, Boolean] = {
       for {
         artists   <- Config.myArtists
@@ -61,7 +63,7 @@ package object filters {
     def done(dto: TrackDto): ZIO[Config, Throwable, Unit] = ZIO.succeed()
   }
 
-  val onlyNew: TrackFilter = new TrackFilter
+  val onlyNew : TrackFilter = new TrackFilter
   {
     def check(dto: TrackDto): ZIO[FilterEnv, Throwable, Boolean] = checkCore(dto, false)
     def checkBeforeProcessing(dto: TrackDto): ZIO[FilterEnv, Throwable, Boolean] = checkCore(dto, true)
@@ -120,4 +122,31 @@ package object filters {
       }
     }
   }
+
+  val noShit = new TrackFilter {
+    def check(dto: TrackDto): ZIO[FilterEnv, Throwable, Boolean] = for {
+      shitLabels <- Config.shitLabels
+    } yield shitLabels.map(_.toLowerCase).contains(dto.label.toLowerCase)
+
+    def checkBeforeProcessing(dto: TrackDto): ZIO[FilterEnv, Throwable, Boolean] = check(dto)
+    def done(dto: TrackDto): ZIO[FilterEnv, Throwable, Unit] = ZIO.succeed()
+  }
+
+  val noEdits : TrackFilter = new TrackFilter {
+    def check(dto: TrackDto): ZIO[FilterEnv, Throwable, Boolean] = for {
+      minDuration <- Config.configDescription.map(desc => Duration.ofSeconds(desc.noEdits.minTrackDurationSeconds))
+    } yield dto.duration.compareTo(minDuration) >= 0
+
+    def checkBeforeProcessing(dto: TrackDto): ZIO[FilterEnv, Throwable, Boolean] = check(dto)
+    def done(dto: TrackDto): ZIO[FilterEnv, Throwable, Unit] = ZIO.succeed()
+  }
+
+  def getFilterByTag(tag : FilterTag) : TrackFilter =
+    tag match {
+      case FilterTag.My             => my
+      case FilterTag.NoCompilations => empty
+      case FilterTag.NoShit         => noShit
+      case FilterTag.NoEdits        => noEdits
+      case FilterTag.OnlyNew        => onlyNew
+    }
 }

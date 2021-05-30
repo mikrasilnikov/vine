@@ -1,9 +1,8 @@
 package pd2
 import pd2.config.Config
-import pd2.config.ConfigDescription.Feed.{BeatportFeed, TraxsourceFeed}
-import pd2.config.ConfigDescription.FilterTag
+import pd2.config.ConfigDescription.{Feed, FeedTag, FilterTag}
 import pd2.data.{Backend, DatabaseService}
-import pd2.providers.TrackDto
+import pd2.providers.{TrackDto, filters, getProviderByFeedTag}
 import pd2.providers.beatport.{Beatport, BeatportLive}
 import pd2.providers.traxsource.{Traxsource, TraxsourceLive}
 import pd2.ui.ProgressBar.ProgressBarDimensions
@@ -15,91 +14,133 @@ import zio.duration.durationInt
 import zio.nio.core.file.Path
 import zio.nio.file.Files
 import zio.system.System
-import zio.{Chunk, ExitCode, Ref, Schedule, URIO, ZIO, clock}
+import pd2.providers.filters.FilterEnv
+import zio.clock.Clock
+import zio.{Chunk, ExitCode, Has, Ref, Schedule, URIO, ZIO, ZLayer, clock}
 
 import java.time.LocalDate
+import scala.util.Try
 
 object Application extends zio.App {
-  override def run(args: List[String]): URIO[zio.ZEnv, ExitCode] = {
 
-    val feed1 = TraxsourceFeed(
-      "03-traxsource-tech-all",
-      "/genre/18/tech-house/all?cn=tracks&ipp=100&period={0},{1}&gf=18",
-      List())
+  def run(args: List[String]): URIO[zio.ZEnv, ExitCode] = {
 
-    val feed2 = TraxsourceFeed(
-      "03-traxsource-deep-all",
-      "/genre/13/deep-house/all?cn=tracks&ipp=100&period={0},{1}&gf=4",
-      List())
+    val explicitPeriodOption = for {
+      dateFrom  <- getParamOption(args, "--from", LocalDate.parse)
+      dateTo    <- getParamOption(args, "--dateTo", LocalDate.parse)
+    } yield (dateFrom, dateTo)
 
-    val feed3 = BeatportFeed(
-      "03-beatport-house",
-      "/genre/house/5/tracks?per-page=150&start-date={0}&end-date={1}",
-      List())
+    val singleDayPeriodOption = for {
+      date <- getParamOption(args, "--date", LocalDate.parse)
+    } yield (date, date.plusDays(1))
 
-    val feed4 = BeatportFeed(
-      "03-beatport-tech",
-      "/genre/tech-house/11/tracks?per-page=150&start-date={0}&end-date={1}",
-      List())
+    val environmentOption = for {
+      (from, to)  <- explicitPeriodOption.orElse(singleDayPeriodOption)
+      configPath  <- getParamOption(args, "--config", Path.apply(_))
+      dbPath      <- getParamOption(args, "--database", Path.apply(_))
+      maxConn     <- getParamOption(args, "--maxConnections", _.toInt)
+    } yield makeEnvironment(
+      maxConnections = maxConn,
+      barDimensions = ProgressBarDimensions(25, 65),
+      configFilePath = configPath,
+      dbFilePath  = dbPath,
+      dateFrom = from,
+      dateTo = to)
 
+    val effect = for {
+      previewsBase  <- Config.previewsBasePath
+      _             <- Files.createDirectory(previewsBase).whenM(Files.notExists(previewsBase))
+
+      progressFiber <- ConsoleProgress.drawProgress.repeat(Schedule.fixed(500.millis)).forever.fork
+      processedRef  <- Ref.make(List[TrackDto]())
+
+      feeds         <- Config.configDescription.map(_.feeds)
+      _             <- ZIO.foreachPar_(feeds)(f => processFeed(f, processedRef))
+
+      _             <- clock.sleep(500.millis) *> progressFiber.interrupt
+      processed     <- processedRef.get
+      _             <- putStrLn(s"\ntotal tracks: ${processed.length}")
+    } yield ()
+
+    environmentOption match {
+      case None => printUsage.exitCode
+      case Some(env) => effect.provideCustomLayer(env).exitCode
+    }
+  }
+
+  def printUsage : ZIO[Console, Nothing, Unit] = for {
+    _ <- putStrLn("Examples:")
+    _ <- putStrLn("java -cp PreviewsDownloader2.jar pd2.Application --dateFrom=2021-05-01 --dateTo=2021-05-07 --config=config.json --database=data.db --maxConnections=16")
+    _ <- putStrLn("java -cp PreviewsDownloader2.jar pd2.Application --date=2021-05-01                         --config=config.json --database=data.db --maxConnections=16")
+  } yield ()
+
+  def getParamOption[P](args : List[String], name : String, unsafeParse : String => P) : Option[P] =
+    for {
+      arg <- args.find(_.startsWith(name))
+      parameterStr <- arg.split('=').lastOption
+      tryParsed = Try { unsafeParse(parameterStr) }
+      res <- tryParsed.fold[Option[P]](_ => None, Some(_))
+    } yield res
+
+  def processFeed(feed : Feed, refDtos : Ref[List[TrackDto]])
+  : ZIO[
+    Traxsource with Beatport with FilterEnv with Blocking with Clock,
+    Throwable, Unit] =
+    for {
+      feedFilter  <- ZIO.succeed(feed.filterTags
+                      .map(filters.getFilterByTag)
+                      .foldLeft(filters.empty)(_ ++ _))
+      dateFrom    <- Config.dateFrom
+      dateTo      <- Config.dateTo
+      musicStore  <- getProviderByFeedTag(feed.tag)
+      _           <- musicStore.processTracks(feed, dateFrom, dateTo, feedFilter,
+                      (dto, data) => processTrack(dto, data, refDtos))
+    } yield ()
+
+  def processTrack(dto: TrackDto, data: Array[Byte], refDtos : Ref[List[TrackDto]])
+  : ZIO[Blocking with Config, Throwable, Unit] =
+  {
     def fixPath(s : String) : String =
       s.replaceAll("([<>:\"/\\\\|?*])", "_")
 
-    def processTrack(trackDto: TrackDto, data : Array[Byte]): ZIO[Blocking with Config, Throwable, Unit] =
-      for {
-        previewsBase  <- Config.targetPath
-        feedPath     =  previewsBase / Path(trackDto.feed)
-        _             <- Files.createDirectory(feedPath).whenM(Files.notExists(feedPath))
-        fileName      =  s"${fixPath(trackDto.artist)} - ${fixPath(trackDto.title)}.mp3"
-        _             <- Files.writeBytes(feedPath / Path(fileName), Chunk.fromArray(data))
+    for {
+      previewsBase  <- Config.previewsBasePath
+      feedPath      =  previewsBase / Path(dto.feed)
+      _             <- Files.createDirectory(feedPath).whenM(Files.notExists(feedPath))
+      duration      =  s"${dto.duration.toSeconds / 60}:${dto.duration.toSeconds % 60}"
+      fileName      =  s"[${dto.label}] [${dto.releaseName}] - ${dto.artist} - ${dto.title} - [${duration.toString}].mp3"
+      _             <- Files.writeBytes(feedPath / Path(fixPath(fileName)), Chunk.fromArray(data))
+      _             <- refDtos.update(dto :: _)
     } yield ()
+  }
 
-    val date1 = LocalDate.parse("2021-05-01")
-    val date2 = LocalDate.parse("2021-05-02")
-
-    val effect = for {
-      targetPath    <- Config.targetPath
-      _             <- Files.createDirectory(targetPath).whenM(Files.notExists(targetPath))
-
-      receivedDtos <- Ref.make(List[TrackDto]())
-
-      progressFiber <- ConsoleProgress.drawProgress.repeat(Schedule.fixed(500.millis)).forever.fork
-
-      fiber1 <- Traxsource.processTracks(feed1, date1, date2,
-                  pd2.providers.filters.onlyNew,
-                  (dto, data) => processTrack(dto, data) *> receivedDtos.update(dto :: _)).fork
-
-      fiber2 <- Traxsource.processTracks(feed2, date1, date2,
-                  pd2.providers.filters.onlyNew,
-                  (dto, data) => processTrack(dto, data) *> receivedDtos.update(dto :: _)).fork
-
-      fiber3  <- Beatport.processTracks(feed3, date1, date2,
-                  pd2.providers.filters.onlyNew,
-                  (dto, data) => processTrack(dto, data) *> receivedDtos.update(dto :: _)).fork
-
-      fiber4  <- Beatport.processTracks(feed4, date1, date2,
-                  pd2.providers.filters.onlyNew,
-                  (dto, data) => processTrack(dto, data) *> receivedDtos.update(dto :: _)).fork
-
-      _   <- fiber1.join *> fiber2.join *> fiber3.join *> fiber4.join
-      _   <- clock.sleep(500.millis) *> progressFiber.interrupt
-      res <- receivedDtos.map(_.sortBy(dto => (dto.artist, dto.title))).get
-
-      _   <- putStrLn(s"\ntotal tracks: ${res.length}")
-    } yield ()
-
+  def makeEnvironment(
+    maxConnections  : Int,
+    barDimensions   : ProgressBarDimensions,
+    configFilePath  : Path,
+    dbFilePath      : Path,
+    dateFrom        : LocalDate,
+    dateTo          : LocalDate)
+  : ZLayer[
+    Console with Blocking,
+    Throwable,
+    Traxsource with Beatport with ConsoleProgress with Config with Has[DatabaseService]] =
+  {
     import sttp.client3.httpclient.zio.HttpClientZioBackend
 
-    val configLayer = Config.makeLayer("config.json", date1, globalConnectionsLimit = 8)
-    val consoleProgress = (System.live ++ Console.live) >>> ConsoleProgressLive.makeLayer(ProgressBarDimensions(25, 65))
-    val traxsourceLive = configLayer ++ (consoleProgress ++ HttpClientZioBackend.layer()) >>> TraxsourceLive.makeLayer(8)
-    val beatportLive = configLayer ++ (consoleProgress ++ HttpClientZioBackend.layer()) >>> BeatportLive.makeLayer(8)
+    val configLayer = Config.makeLayer(configFilePath, dateFrom, dateTo, maxConnections)
+    val consoleProgress = (System.live ++ Console.live) >>> ConsoleProgressLive.makeLayer(barDimensions)
+
+    val traxsourceLive = configLayer ++
+      (consoleProgress ++ HttpClientZioBackend.layer()) >>> TraxsourceLive.makeLayer(8)
+
+    val beatportLive = configLayer ++
+      (consoleProgress ++ HttpClientZioBackend.layer()) >>> BeatportLive.makeLayer(8)
 
     val database =
-      Backend.makeLayer(SQLiteProfile, Backend.makeSqliteLiveConfig(Path("c:\\!temp\\imported.db"))) >>>
+      Backend.makeLayer(SQLiteProfile, Backend.makeSqliteLiveConfig(dbFilePath)) >>>
       DatabaseService.makeLayer(SQLiteProfile)
-    val customLayer =  traxsourceLive ++ beatportLive ++ consoleProgress ++ configLayer ++ database
 
-    effect.provideCustomLayer(customLayer).exitCode
+    traxsourceLive ++ beatportLive ++ consoleProgress ++ configLayer ++ database
   }
 }

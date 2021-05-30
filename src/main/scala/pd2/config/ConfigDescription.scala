@@ -5,10 +5,6 @@ import io.circe._
 import io.circe.generic.auto._
 import pd2.config.ConfigDescription._
 
-sealed trait FilterConfig
-sealed trait FilterTag
-sealed trait Feed
-
 case class ConfigDescription(
    previewsFolder : String,
    my             : FilterConfig.My,
@@ -20,6 +16,13 @@ case class ConfigDescription(
 
 object ConfigDescription {
 
+  sealed trait FeedTag
+  object FeedTag {
+    case object BeatportFeed extends FeedTag
+    case object TraxsourceFeed extends FeedTag
+  }
+
+  sealed trait FilterConfig
   object FilterConfig {
     case class My(artistsFile: String, labelsFile: String) extends FilterConfig
     case class OnlyNew(dataPath: String, fileTemplate: String) extends FilterConfig
@@ -28,20 +31,16 @@ object ConfigDescription {
     case class NoEdits(minTrackDurationSeconds: Int) extends FilterConfig
   }
 
+  sealed trait FilterTag
   object FilterTag {
-    case object Empty           extends FilterTag
     case object My              extends FilterTag
     case object OnlyNew         extends FilterTag
     case object NoShit          extends FilterTag
     case object NoCompilations  extends FilterTag
     case object NoEdits         extends FilterTag
-    case object Complex         extends FilterTag
   }
 
-  object Feed {
-    case class BeatportFeed(name : String, urlTemplate : String, filters : List[FilterTag]) extends Feed
-    case class TraxsourceFeed(name : String, urlTemplate : String, filters : List[FilterTag]) extends Feed
-  }
+  final case class Feed(tag: FeedTag, name: String, urlTemplate: String, filterTags: List[FilterTag])
 
   implicit val filterTagDecoder : Decoder[FilterTag] = new Decoder[FilterTag] {
     override def apply(c: HCursor): Result[FilterTag] =
@@ -65,8 +64,8 @@ object ConfigDescription {
         filters     <- c.downField("filters").as[List[FilterTag]]
       } yield {
         provider match {
-          case "beatport" => Feed.BeatportFeed(name, urlTemplate, filters)
-          case "traxsource" => Feed.TraxsourceFeed(name, urlTemplate, filters)
+          case "beatport" => Feed(FeedTag.BeatportFeed, name, urlTemplate, filters)
+          case "traxsource" => Feed(FeedTag.TraxsourceFeed, name, urlTemplate, filters)
         }
       }
   }

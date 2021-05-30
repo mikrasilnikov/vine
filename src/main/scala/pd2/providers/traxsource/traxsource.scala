@@ -1,9 +1,7 @@
 package pd2.providers
 
-import pd2.config.ConfigDescription.Feed.TraxsourceFeed
-import pd2.config.FilterTag
+import pd2.config.ConfigDescription.Feed
 import pd2.providers.filters.{FilterEnv, TrackFilter}
-import pd2.providers.{Pd2Exception, TrackDto}
 import zio.clock.Clock
 import zio.{Has, ZIO}
 import zio.macros.accessible
@@ -17,9 +15,9 @@ package object traxsource {
   @accessible
   object Traxsource
   {
-    trait Service extends WebDataProvider[TraxsourceFeed] {
+    trait Service extends MusicStoreDataProvider {
       def processTracks[R, E <: Throwable](
-        feed        : TraxsourceFeed,
+        feed        : Feed,
         dateFrom    : LocalDate,
         dateTo      : LocalDate,
         filter      : TrackFilter,

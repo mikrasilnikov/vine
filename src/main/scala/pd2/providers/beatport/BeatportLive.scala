@@ -1,7 +1,7 @@
 package pd2.providers.beatport
 
 import pd2.config.Config
-import pd2.config.ConfigDescription.Feed.BeatportFeed
+import pd2.config.ConfigDescription.Feed
 import pd2.helpers.Conversions.EitherToZio
 import pd2.providers.filters.{FilterEnv, TrackFilter}
 import pd2.providers.{Pd2Exception, TrackDto}
@@ -26,7 +26,7 @@ case class BeatportLive(
   val beatportHost = "https://www.beatport.com"
 
   override def processTracks[R, E <: Throwable](
-    feed: BeatportFeed,
+    feed: Feed,
     dateFrom: LocalDate,
     dateTo: LocalDate,
     filter: TrackFilter,
@@ -47,7 +47,7 @@ case class BeatportLive(
   }
 
   private def processTracklistPage[R, E <: Throwable](
-    feed: BeatportFeed,
+    feed: Feed,
     dateFrom: LocalDate,
     dateTo: LocalDate,
     pageNum: Int,
@@ -73,7 +73,7 @@ case class BeatportLive(
     } yield ()
   }
 
-  private def getTracklistWebPage(feed: BeatportFeed, dateFrom: LocalDate, dateTo: LocalDate, page: Int = 1)
+  private def getTracklistWebPage(feed: Feed, dateFrom: LocalDate, dateTo: LocalDate, page: Int = 1)
   : ZIO[Clock, Pd2Exception, BeatportPage] = {
     for {
       pageReq   <- buildPageRequest(beatportHost, feed.urlTemplate, dateFrom, dateTo, page).toZio

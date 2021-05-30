@@ -24,8 +24,8 @@ object DataImport extends zio.App {
   case class Params(sourcePath : Path, outputPath : Path)
 
   private def printUsage = for {
-    _ <- putStrLn("Usage:   java -cp pd2.DataImport {OutputFile} {SourceDataPath}")
-    _ <- putStrLn("Example: java -cp pd2.DataImport c:\\PreviewsDownloader2\\imported.db c:\\PreviwsDownloader\\data\\tracks")
+    _ <- putStrLn("Usage:   java -cp {jar} pd2.DataImport {OutputFile} {SourceDataPath}")
+    _ <- putStrLn("Example: java -cp PreviewsDownloader2.jar pd2.DataImport c:\\PreviewsDownloader2\\imported.db c:\\PreviwsDownloader\\data\\tracks")
   } yield ()
 
   private def parseAndValidateParams(args: List[String]) = {

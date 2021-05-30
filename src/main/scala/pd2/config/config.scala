@@ -22,22 +22,35 @@ package object config {
 
     trait Service {
       def configDescription   : ConfigDescription
+      def dateFrom            : LocalDate
+      def dateTo              : LocalDate
       def myArtists           : List[String]
       def myLabels            : List[String]
       def shitLabels          : List[String]
-      def targetPath          : Path
+      def previewsBasePath    : Path
       def runId               : LocalDateTime
       def globalConnSemaphore : Semaphore
     }
 
-    def makeLayer(fileName : String, date : LocalDate, globalConnectionsLimit : Int) : ZLayer[Console with Blocking, Throwable, Config] = {
+    /**
+     * @param filePath относительный путь к файлу конфигурации
+     * @param from стартовая дата релиза треков (включительно)
+     * @param to конечная дата релиза треков (не включительно)
+     * @param globalConnectionsLimit максимальное количество параллельных соединений
+     */
+    def makeLayer(
+      filePath : Path,
+      from : LocalDate,
+      to : LocalDate,
+      globalConnectionsLimit: Int)
+    : ZLayer[Console with Blocking, Throwable, Config] = {
 
       val make = for {
-        _           <- putStrLn(s"Loading config from $fileName...")
+        _           <- putStrLn(s"Loading config from $filePath...")
 
         jarPath     <- ZIO.effectTotal(
                           Path(new File(Config.getClass.getProtectionDomain.getCodeSource.getLocation.toURI).getPath).parent.get)
-        cfgPath     = jarPath / Path(fileName)
+        cfgPath     = jarPath / filePath
 
         jsonString  <- Files.readAllBytes(cfgPath).map(c => new String(c.toArray, StandardCharsets.UTF_8))
         json        <- parse(jsonString).toZio.mapError(s => new Exception(s))
@@ -52,13 +65,18 @@ package object config {
         _           <- putStrLn(s"Loaded ${shit.length} shit labels")
         localDt     <- ZIO.succeed(LocalDateTime.now())
         gSemaphore  <- Semaphore.make(globalConnectionsLimit)
+        targetFolder= description.previewsFolder.replace("{0}",
+                       if (from == to) from.toString
+                       else s"${from.toString}_${to.toString}")
 
       } yield new Service {
         val configDescription: ConfigDescription = description
+        val dateFrom: LocalDate = from
+        val dateTo: LocalDate = to
         val myArtists: List[String] = artists
         val myLabels: List[String] = labels
         val shitLabels: List[String] = shit
-        val targetPath: Path = jarPath / Path(description.previewsFolder.replace("{0}", date.toString))
+        val previewsBasePath: Path = jarPath / Path(targetFolder)
         val runId : LocalDateTime = localDt
         val globalConnSemaphore : Semaphore = gSemaphore
       }

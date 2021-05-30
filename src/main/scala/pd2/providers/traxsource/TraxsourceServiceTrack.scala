@@ -8,27 +8,29 @@ import pd2.providers.traxsource.TraxsourceServiceTrack.{TraxsourceServiceArtist,
 import pd2.providers.{Pd2Exception, TrackDto}
 import sttp.model.Uri
 
-import java.time.LocalDate
+import java.time.{Duration, LocalDate}
 import scala.util.{Failure, Success, Try}
 
 final case class TraxsourceServiceTrack(
-  feed : String,
-  trackId : Int,
-  artists : List[TraxsourceServiceArtist],
-  title : String,
-  titleUrl : String,
-  trackUrl : String,
-  label : TraxsourceServiceLabel,
-  genre : String,
-  catNumber : String,
-  durationSeconds : Int,
+  feed        : String,
+  trackId     : Int,
+  artists     : List[TraxsourceServiceArtist],
+  title       : String,
+  titleUrl    : String,
+  trackUrl    : String,
+  label       : TraxsourceServiceLabel,
+  genre       : String,
+  catNumber   : String,
+  duration    : Duration,
   releaseDate : LocalDate,
-  imageUrl : Uri,
-  mp3Url : Uri,
-  keySig : String
+  imageUrl    : Uri,
+  mp3Url      : Uri,
+  keySig      : String
 ) {
   val artist = artists.mkString(", ")
-  def toTrackDto : TrackDto = TrackDto(artists.map(_.name).mkString(", "), title, label.name, releaseDate, feed, trackId)
+  val releaseName = titleUrl.split('/').last.replaceAll("-", " ")
+  def toTrackDto : TrackDto =
+    TrackDto(artists.map(_.name).mkString(", "), title, label.name, releaseName, releaseDate, duration, feed, trackId)
 }
 
 object TraxsourceServiceTrack {
@@ -91,15 +93,15 @@ object TraxsourceServiceTrack {
   def traxsourceServiceTrackDecoder(feed : String): Decoder[TraxsourceServiceTrack] = new Decoder[TraxsourceServiceTrack] {
     override def apply(c: HCursor) : Decoder.Result[TraxsourceServiceTrack] =
       for {
-        id <- c.downField("track_id").as[Int]
-        artists <- c.downField("artist").as[List[TraxsourceServiceArtist]]
-        title <- c.downField("title").as[String]
-        titleUrl <- c.downField("title_url").as[String]
-        trackUrl <- c.downField("track_url").as[String]
-        label <- c.downField("label").as[TraxsourceServiceLabel]
-        genre <- c.downField("genre").as[String]
-        catNumber <- c.downField("catnumber").as[String]
-        duration <- c.downField("duration").as[String] // XX:XX:XX
+        id              <- c.downField("track_id").as[Int]
+        artists         <- c.downField("artist").as[List[TraxsourceServiceArtist]]
+        title           <- c.downField("title").as[String]
+        titleUrl        <- c.downField("title_url").as[String]
+        trackUrl        <- c.downField("track_url").as[String]
+        label           <- c.downField("label").as[TraxsourceServiceLabel]
+        genre           <- c.downField("genre").as[String]
+        catNumber       <- c.downField("catnumber").as[String]
+        durationSeconds <- c.downField("duration").as[String] // XX:XX:XX
           .map { s =>
             val multipliers = List(60 * 60, 60, 1)
             val parts = s.split(':').map(_.toInt).toList
@@ -108,13 +110,13 @@ object TraxsourceServiceTrack {
               .map { case (p, m) => p * m }
               .sum
           }
-        releaseDate <- c.downField("r_date").as[LocalDate]
-        imageUrl <- c.downField("image").as[Uri]
-        mp3Url <- c.downField("mp3").as[Uri]
-        key <- c.downField("keysig").as[String]
+        releaseDate     <- c.downField("r_date").as[LocalDate]
+        imageUrl        <- c.downField("image").as[Uri]
+        mp3Url          <- c.downField("mp3").as[Uri]
+        key             <- c.downField("keysig").as[String]
       } yield TraxsourceServiceTrack(feed,
         id, artists, title, titleUrl, trackUrl, label, genre,
-        catNumber, duration, releaseDate, imageUrl, mp3Url, key)
+        catNumber, Duration.ofSeconds(durationSeconds), releaseDate, imageUrl, mp3Url, key)
   }
 
 }

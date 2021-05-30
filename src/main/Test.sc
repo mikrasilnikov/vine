@@ -1,2 +1,4 @@
-import io.getquill._
+import java.time.Duration
+
+Duration.ofSeconds(333).
 

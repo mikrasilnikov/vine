@@ -9,7 +9,7 @@ import zio.test.Assertion.{equalTo, isFalse, isTrue}
 import zio.test.mock.Expectation._
 import zio.test.{DefaultRunnableSpec, assert}
 
-import java.time.{LocalDate, LocalDateTime}
+import java.time.{Duration, LocalDate, LocalDateTime}
 
 object OnlyNewFilterSuite extends DefaultRunnableSpec {
 
@@ -22,7 +22,9 @@ object OnlyNewFilterSuite extends DefaultRunnableSpec {
             "Sandy Rivera",
             "I Can't Stop",
             "Underwater",
+            "body music vol 1",
             LocalDate.parse("2003-05-26"),
+            Duration.ofMinutes(5),
             "03-traxsource-house-featured",
             12345)
 
@@ -52,7 +54,9 @@ object OnlyNewFilterSuite extends DefaultRunnableSpec {
           "Sandy Rivera",
           "I Can't Stop",
           "Underwater",
+          "body music vol 1",
           LocalDate.parse("2003-05-26"),
+          Duration.ofMinutes(5),
           "03-traxsource-house-featured",
           12345)
 
@@ -87,7 +91,9 @@ object OnlyNewFilterSuite extends DefaultRunnableSpec {
           "Sandy Rivera",
           "I Can't Stop",
           "Underwater",
+          "body music vol 1",
           LocalDate.parse("2003-05-26"),
+          Duration.ofMinutes(5),
           "03-traxsource-house-featured",
           12345)
 
@@ -124,7 +130,9 @@ object OnlyNewFilterSuite extends DefaultRunnableSpec {
           "Sandy Rivera",
           "I Can't Stop",
           "Underwater",
+          "body music vol 1",
           LocalDate.parse("2003-05-26"),
+          Duration.ofMinutes(5),
           "03-traxsource-house-featured",
           12345)
 
@@ -161,7 +169,9 @@ object OnlyNewFilterSuite extends DefaultRunnableSpec {
           "Sandy Rivera",
           "I Can't Stop",
           "Underwater",
+          "body music vol 1",
           LocalDate.parse("2003-05-26"),
+          Duration.ofMinutes(5),
           "03-traxsource-house-featured",
           12345)
 
@@ -195,7 +205,9 @@ object OnlyNewFilterSuite extends DefaultRunnableSpec {
           "Sandy Rivera",
           "I Can't Stop",
           "Underwater",
+          "body music vol 1",
           LocalDate.parse("2003-05-26"),
+          Duration.ofMinutes(5),
           "03-traxsource-house-featured",
           12345)
 
@@ -232,7 +244,9 @@ object OnlyNewFilterSuite extends DefaultRunnableSpec {
           "Sandy Rivera",
           "I Can't Stop",
           "Underwater",
+          "body music vol 1",
           LocalDate.parse("2003-05-26"),
+          Duration.ofMinutes(5),
           "03-traxsource-house-featured",
           12345)
 
@@ -270,7 +284,9 @@ object OnlyNewFilterSuite extends DefaultRunnableSpec {
           "Sandy Rivera",
           "I Can't Stop",
           "Underwater",
+          "body music vol 1",
           LocalDate.parse("2003-05-26"),
+          Duration.ofMinutes(5),
           "03-traxsource-house-featured",
           12345)
 

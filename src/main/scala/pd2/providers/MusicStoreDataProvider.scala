@@ -1,6 +1,6 @@
 package pd2.providers
 
-import pd2.config.Feed
+import pd2.config.ConfigDescription.Feed
 import pd2.providers.Pd2Exception.{InternalConfigurationError, ServiceUnavailable, TraxsourceBadContentLength}
 import pd2.providers.filters.{FilterEnv, TrackFilter}
 import sttp.client3
@@ -14,7 +14,7 @@ import pd2.helpers.Conversions._
 
 import java.time.LocalDate
 
-trait WebDataProvider[F <: Feed] {
+trait MusicStoreDataProvider {
 
     type SttpRequest = RequestT[client3.Identity, Either[String, Array[Byte]], Any]
 
@@ -23,7 +23,7 @@ trait WebDataProvider[F <: Feed] {
     protected val globalSemaphore : Semaphore
 
     def processTracks[R, E <: Throwable](
-      feed        : F,
+      feed        : Feed,
       dateFrom    : LocalDate,
       dateTo      : LocalDate,
       filter      : TrackFilter,

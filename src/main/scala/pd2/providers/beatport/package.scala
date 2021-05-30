@@ -1,6 +1,6 @@
 package pd2.providers
 
-import pd2.config.ConfigDescription.Feed.BeatportFeed
+import pd2.config.ConfigDescription.Feed
 import pd2.providers.filters._
 import zio.{Has, ZIO}
 import zio.clock.Clock
@@ -14,9 +14,9 @@ package object beatport {
   @accessible
   object Beatport
   {
-    trait Service extends WebDataProvider[BeatportFeed] {
+    trait Service extends MusicStoreDataProvider {
       def processTracks[R, E <: Throwable](
-        feed        : BeatportFeed,
+        feed        : Feed,
         dateFrom    : LocalDate,
         dateTo      : LocalDate,
         filter      : TrackFilter,

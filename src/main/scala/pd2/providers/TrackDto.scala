@@ -4,15 +4,17 @@ import pd2.data.{Track, TrackParsing}
 import pd2.data.TrackParsing.rewriteTrackName
 import zio.{URIO, ZIO}
 
-import java.time.{LocalDate, LocalDateTime}
+import java.time.{Duration, LocalDate, LocalDateTime}
 
 case class TrackDto(
-  artist : String,
-  title : String,
-  label : String,
+  artist      : String,
+  title       : String,
+  label       : String,
+  releaseName : String,
   releaseDate : LocalDate,
-  feed : String,
-  internalId : Int)
+  duration    : Duration,
+  feed        : String,
+  internalId  : Int)
 {
   val uniqueNameOption: Option[String] = TrackParsing.getUniqueNameOption(artist, title)
 

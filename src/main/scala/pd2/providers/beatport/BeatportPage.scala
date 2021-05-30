@@ -33,7 +33,9 @@ case class BeatportPageTrack(
     artists.map(_.name).mkString(", "),
     if (mix.isBlank) name else s"$name ($mix)",
     label,
+    release,
     releaseDate,
+    duration.fold(Duration.ZERO)(identity),
     feed,
     id)
 }
