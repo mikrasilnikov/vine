@@ -66,7 +66,7 @@ package object config {
         localDt     <- ZIO.succeed(LocalDateTime.now())
         gSemaphore  <- Semaphore.make(globalConnectionsLimit)
         targetFolder= description.previewsFolder.replace("{0}",
-                       if (from == to) from.toString
+                       if (from == to.minusDays(1)) from.toString
                        else s"${from.toString}_${to.toString}")
 
       } yield new Service {

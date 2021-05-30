@@ -1,4 +1,4 @@
 import java.time.Duration
 
-Duration.ofSeconds(333).
+"1231231".split('=')
 

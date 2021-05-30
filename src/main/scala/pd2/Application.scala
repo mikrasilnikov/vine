@@ -26,7 +26,7 @@ object Application extends zio.App {
   def run(args: List[String]): URIO[zio.ZEnv, ExitCode] = {
 
     val explicitPeriodOption = for {
-      dateFrom  <- getParamOption(args, "--from", LocalDate.parse)
+      dateFrom  <- getParamOption(args, "--dateFrom", LocalDate.parse)
       dateTo    <- getParamOption(args, "--dateTo", LocalDate.parse)
     } yield (dateFrom, dateTo)
 
@@ -36,12 +36,12 @@ object Application extends zio.App {
 
     val environmentOption = for {
       (from, to)  <- explicitPeriodOption.orElse(singleDayPeriodOption)
-      configPath  <- getParamOption(args, "--config", Path.apply(_))
-      dbPath      <- getParamOption(args, "--database", Path.apply(_))
-      maxConn     <- getParamOption(args, "--maxConnections", _.toInt)
+      configPath  <- getParamOption(args, "--config", Path.apply(_)).orElse(Some(Path("config.json")))
+      dbPath      <- getParamOption(args, "--database", Path.apply(_)).orElse(Some(Path("data.db")))
+      maxConn     <- getParamOption(args, "--maxConnections", _.toInt).orElse(Some(16))
     } yield makeEnvironment(
       maxConnections = maxConn,
-      barDimensions = ProgressBarDimensions(25, 65),
+      barDimensions = ProgressBarDimensions(30, 65),
       configFilePath = configPath,
       dbFilePath  = dbPath,
       dateFrom = from,
@@ -70,13 +70,15 @@ object Application extends zio.App {
 
   def printUsage : ZIO[Console, Nothing, Unit] = for {
     _ <- putStrLn("Examples:")
+    _ <- putStrLn("java -cp PreviewsDownloader2.jar pd2.Application --date=2021-05-01")
+    _ <- putStrLn("java -cp PreviewsDownloader2.jar pd2.Application --dateFrom=2021-05-01 --dateTo=2021-05-07")
+    _ <- putStrLn("java -cp PreviewsDownloader2.jar pd2.Application --dateFrom=2021-05-01 --dateTo=2021-05-07 --config=config.json")
     _ <- putStrLn("java -cp PreviewsDownloader2.jar pd2.Application --dateFrom=2021-05-01 --dateTo=2021-05-07 --config=config.json --database=data.db --maxConnections=16")
-    _ <- putStrLn("java -cp PreviewsDownloader2.jar pd2.Application --date=2021-05-01                         --config=config.json --database=data.db --maxConnections=16")
   } yield ()
 
   def getParamOption[P](args : List[String], name : String, unsafeParse : String => P) : Option[P] =
     for {
-      arg <- args.find(_.startsWith(name))
+      arg <- args.find(_.startsWith(s"$name="))
       parameterStr <- arg.split('=').lastOption
       tryParsed = Try { unsafeParse(parameterStr) }
       res <- tryParsed.fold[Option[P]](_ => None, Some(_))
