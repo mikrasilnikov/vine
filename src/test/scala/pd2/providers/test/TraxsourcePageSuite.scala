@@ -53,6 +53,16 @@ object TraxsourcePageSuite extends DefaultRunnableSpec with ManagedTestResources
             .map(res => assert(res)(equalTo(expected)))
         },
 
+        testM("Traxsource_Empty.html") {
+          val expected = TraxsourcePage(
+            None,
+            List())
+
+          loadTextFileManaged("/Traxsource_Empty.html.zip")
+            .use { doc => ZIO.fromEither(TraxsourcePage.parse(doc)) }
+            .map(res => assert(res)(equalTo(expected)))
+        }
+
       )
     )
 }

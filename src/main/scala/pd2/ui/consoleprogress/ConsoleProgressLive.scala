@@ -56,6 +56,7 @@ final case class ConsoleProgressLive(
   def drawProgress: ZIO[Any, Nothing, Unit] = {
     import java.time.temporal.ChronoUnit
     for {
+
       state <- drawState.get
       now   <- ZIO.effectTotal(LocalTime.now())
       tick  =  state.startTime.until(now, ChronoUnit.MILLIS) / 333

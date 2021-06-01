@@ -30,6 +30,7 @@ package object config {
       def previewsBasePath    : Path
       def runId               : LocalDateTime
       def globalConnSemaphore : Semaphore
+      def appPath             : Path
     }
 
     /**
@@ -46,7 +47,7 @@ package object config {
     : ZLayer[Console with Blocking, Throwable, Config] = {
 
       val make = for {
-        _           <- putStrLn(s"Loading config from $filePath...")
+        _           <- putStr(s"Loading config from $filePath. ")
 
         jarPath     <- ZIO.effectTotal(
                           Path(new File(Config.getClass.getProtectionDomain.getCodeSource.getLocation.toURI).getPath).parent.get)
@@ -58,11 +59,11 @@ package object config {
 
         artists     <- Files.readAllLines(jarPath / description.my.artistsFile)
         labels      <- Files.readAllLines(jarPath / description.my.labelsFile)
-        _           <- putStrLn(s"Loaded ${artists.length} watched artists and ${labels.length} watched labels")
+        _           <- putStr(s"Loaded ${artists.length} watched artists and ${labels.length} watched labels. ")
 
         shit        <-  ZIO.foldLeft(description.noShit.dataFiles)(List[String]())(
                           (list, fName) => Files.readAllLines(jarPath / Path(fName)).map(list ++ _))
-        _           <- putStrLn(s"Loaded ${shit.length} shit labels")
+        _           <- putStrLn(s"Loaded ${shit.length} ignored labels.")
         localDt     <- ZIO.succeed(LocalDateTime.now())
         gSemaphore  <- Semaphore.make(globalConnectionsLimit)
         targetFolder= description.previewsFolder.replace("{0}",
@@ -79,6 +80,7 @@ package object config {
         val previewsBasePath: Path = jarPath / Path(targetFolder)
         val runId : LocalDateTime = localDt
         val globalConnSemaphore : Semaphore = gSemaphore
+        val appPath : Path = jarPath
       }
 
       make.toLayer

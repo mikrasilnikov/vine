@@ -18,7 +18,7 @@ import pd2.providers.filters.FilterEnv
 import zio.clock.Clock
 import zio.{Chunk, ExitCode, Has, Ref, Schedule, URIO, ZIO, ZLayer, clock}
 
-import java.time.LocalDate
+import java.time.{LocalDate, LocalDateTime}
 import scala.util.Try
 
 object Application extends zio.App {
@@ -55,16 +55,24 @@ object Application extends zio.App {
       processedRef  <- Ref.make(List[TrackDto]())
 
       feeds         <- Config.configDescription.map(_.feeds)
-      _             <- ZIO.foreachPar_(feeds)(f => processFeed(f, processedRef))
+      _             <- ZIO.foreachPar_(feeds)(f => processFeed(f, processedRef).tapError(e => putStrLn(e.toString)))
 
       _             <- clock.sleep(500.millis) *> progressFiber.interrupt
       processed     <- processedRef.get
       _             <- putStrLn(s"\ntotal tracks: ${processed.length}")
     } yield ()
 
+    val sandboxed = effect.sandbox
+      .tapError(e => for {
+        now       <- ZIO.effectTotal(LocalDateTime.now())
+        appPath   <- Config.appPath
+        fileName  =  s"error-$now.txt".replaceAll(":", "")
+        _         <- Files.writeLines(appPath / Path(fileName), List(e.prettyPrint))
+      } yield ())
+
     environmentOption match {
       case None => printUsage.exitCode
-      case Some(env) => effect.provideCustomLayer(env).exitCode
+      case Some(env) => sandboxed.provideCustomLayer(env).exitCode
     }
   }
 

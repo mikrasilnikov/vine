@@ -14,6 +14,14 @@ object ProgressBarSuite extends DefaultRunnableSpec {
 
       suite("WorkItemsBar") (
 
+        test("empty bar") {
+
+          val itemStates = ArrayBuffer[ItemState]()
+
+          val bar = ProgressBar(itemStates, ProgressBarLayout("test", ProgressBarDimensions(5, 10)))
+          assert(ProgressBar.render(bar))(equalTo("test  [          ]   0%"))
+        },
+
         test("0%") {
 
           val itemStates = ArrayBuffer.from[ItemState](

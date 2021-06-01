@@ -33,14 +33,14 @@ case class BeatportLive(
     processTrack: (TrackDto, Array[Byte]) => ZIO[R, E, Unit])
   : ZIO[R with FilterEnv with Clock, Throwable, Unit] = {
     for {
-      firstPageProgress <- consoleProgress.acquireProgressItem(feed.name)
-      firstPagePromise  <- Promise.make[Nothing, BeatportPage]
+      _                 <- consoleProgress.acquireProgressItems(feed.name, 0)
+      firstPagePromise  <- Promise.make[Throwable, BeatportPage]
       firstPageFiber    <- processTracklistPage(feed, dateFrom, dateTo, 1, filter, processTrack,
-                            firstPageProgress, Some(firstPagePromise)).fork
+                            None, Some(firstPagePromise)).fork
       firstPage         <- firstPagePromise.await
       remainingProgress <- consoleProgress.acquireProgressItems(feed.name, firstPage.remainingPages.length)
       _                 <- ZIO.foreachParN_(8)(firstPage.remainingPages zip remainingProgress) { case (page, p) =>
-                            processTracklistPage(feed, dateFrom, dateTo, page, filter, processTrack, p, None)
+                            processTracklistPage(feed, dateFrom, dateTo, page, filter, processTrack, Some(p), None)
                           }
       _                 <- firstPageFiber.join
     } yield ()
@@ -53,13 +53,15 @@ case class BeatportLive(
     pageNum: Int,
     filter: TrackFilter,
     processTrack: (TrackDto, Array[Byte]) => ZIO[R, E, Unit],
-    pageProgressItem: ProgressItem,
-    pagePromiseOption: Option[Promise[Nothing, BeatportPage]])
+    pageProgressItem: Option[ProgressItem],
+    pagePromiseOption: Option[Promise[Throwable, BeatportPage]])
   : ZIO[R with FilterEnv with Clock, Throwable, Unit] = {
     for {
       page                    <- getTracklistWebPage(feed, dateFrom, dateTo, pageNum)
+                                  .tapError(e => pagePromiseOption.fold(ZIO.succeed())(promise => promise.fail(e).unit))
       _                       <- pagePromiseOption.fold(ZIO.succeed())(_.succeed(page).unit)
-      _                       <- consoleProgress.completeProgressItem(pageProgressItem)
+      _                       <- if (pageProgressItem.isDefined) consoleProgress.completeProgressItem(pageProgressItem.get)
+                                  else ZIO.succeed()
       filteredTracksWithDtos  <- ZIO.filter(page.tracks.map(st => (st, st.toTrackDto(feed.name)))) { case (_, dto) => filter.check(dto) }
       tracksProgress          <- consoleProgress.acquireProgressItems(feed.name, filteredTracksWithDtos.length)
       _                       <- ZIO.foreachParN_(8)(filteredTracksWithDtos zip tracksProgress) { case ((t, dto), p) =>

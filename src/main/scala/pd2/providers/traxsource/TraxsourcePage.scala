@@ -33,7 +33,10 @@ object TraxsourcePage {
     val trackListDiv = doc >?> element("div.trk-list-cont")
 
     val pagerEither : Either[UnexpectedServiceResponse, Option[Pager]] = trackListDiv match {
-      case None => Left(UnexpectedServiceResponse("Could not find element div.trk-list-cont", html, None))
+      case None =>
+        val noTracksDiv = doc >?> element("div.list-cont div.empty")
+        if (noTracksDiv.isDefined) Right(None)
+        else Left(UnexpectedServiceResponse("Could not find element div.trk-list-cont", html, None))
       case Some(div) =>
         val pageAnchors = div >?> element("div.list-pager") >?> element("div.page-nums")
         pageAnchors.flatten match {

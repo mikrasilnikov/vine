@@ -29,8 +29,11 @@ object ProgressBar {
 
         if (fromInt != untilInt)
           bar.workItems.slice(from.toInt, until.toInt)
-        else
-          Vector(bar.workItems(fromInt))
+        else {
+          if (bar.workItems.nonEmpty) Vector(bar.workItems(fromInt))
+          else Vector(Pending) // Если bar пустой, то считаем, что он содержит 1 Pending элемент
+
+        }
       }
       .map { items =>
         val cellState = {
