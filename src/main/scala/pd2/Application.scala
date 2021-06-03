@@ -130,11 +130,17 @@ object Application extends zio.App {
       previewsBase  <- Config.previewsBasePath
       feedPath      =  previewsBase / Path(dto.feed)
       _             <- Files.createDirectory(feedPath).whenM(Files.notExists(feedPath))
-      duration      =  s"${dto.duration.toSeconds / 60}:${dto.duration.toSeconds % 60}"
-      fileName      =  s"[${dto.label}] [${dto.releaseName}] - ${dto.artist} - ${dto.title} - [${duration.toString}].mp3"
+      fileName      =  makeFileName(dto)
       _             <- Files.writeBytes(feedPath / Path(fixPath(fileName)), Chunk.fromArray(data))
       _             <- refDtos.update(dto :: _)
     } yield ()
+  }
+
+  def makeFileName(dto : TrackDto): String = {
+    val durationStr = f"${dto.duration.toSeconds / 60}%02d:${dto.duration.toSeconds % 60}%02d"
+    val withoutExt = s"[${dto.label}] [${dto.releaseName}] - ${dto.artist} - ${dto.title} - [$durationStr]"
+    // Имя файла не должно быть длиннее 255 символов для windows
+    withoutExt.substring(0, 251) ++ ".mp3"
   }
 
   def makeEnvironment(
