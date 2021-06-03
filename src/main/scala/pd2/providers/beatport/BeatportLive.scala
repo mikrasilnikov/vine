@@ -33,7 +33,6 @@ case class BeatportLive(
     processTrack: (TrackDto, Array[Byte]) => ZIO[R, E, Unit])
   : ZIO[R with FilterEnv with ConsoleProgress with Clock, Throwable, Unit] = {
     for {
-      _                 <- consoleProgress.acquireProgressItems(feed.name, 0)
       firstPagePromise  <- Promise.make[Throwable, BeatportPage]
       firstPageFiber    <- processTracklistPage(feed, dateFrom, dateTo, 1, filter, processTrack,
                             None, Some(firstPagePromise)).fork
@@ -43,6 +42,10 @@ case class BeatportLive(
                             processTracklistPage(feed, dateFrom, dateTo, page, filter, processTrack, Some(p), None)
                           }
       _                 <- firstPageFiber.join
+      // Если при обработке фида вообще ничего не скачивалось, то ProgressBar будет стоять на 0%.
+      // Если взять 1 ProgressItem и сразу отметить его как законченный, то ProgressBar будет показывать 100%
+      lastProgress      <- ConsoleProgress.acquireProgressItem(feed.name)
+      _                 <- ConsoleProgress.completeProgressItem(lastProgress)
     } yield ()
   }
 

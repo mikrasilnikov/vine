@@ -38,7 +38,6 @@ case class TraxsourceLive(
   : ZIO[R with FilterEnv with ConsoleProgress with Clock, Throwable, Unit] =
   {
     for {
-      _                 <- consoleProgress.acquireProgressItems(feed.name, 0)
       firstPagePromise  <- Promise.make[Throwable, TraxsourcePage]
       firstPageFiber    <- processTracklistPage(feed, dateFrom, dateTo, 1, filter, processTrack,
                                                 None, Some(firstPagePromise)).fork
@@ -48,6 +47,10 @@ case class TraxsourceLive(
                               processTracklistPage(feed, dateFrom, dateTo, page, filter, processTrack, Some(p), None)
                           }
       _                 <- firstPageFiber.join
+      // Если при обработке фида вообще ничего не скачивалось, то ProgressBar будет стоять на 0%.
+      // Если взять 1 ProgressItem и сразу отметить его как законченный, то ProgressBar будет показывать 100%
+      lastProgress      <- ConsoleProgress.acquireProgressItem(feed.name)
+      _                 <- ConsoleProgress.completeProgressItem(lastProgress)
     } yield ()
   }
 

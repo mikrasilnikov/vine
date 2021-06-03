@@ -140,7 +140,7 @@ object Application extends zio.App {
     val durationStr = f"${dto.duration.toSeconds / 60}%02d:${dto.duration.toSeconds % 60}%02d"
     val withoutExt = s"[${dto.label}] [${dto.releaseName}] - ${dto.artist} - ${dto.title} - [$durationStr]"
     // Имя файла не должно быть длиннее 255 символов для windows
-    withoutExt.substring(0, 251) ++ ".mp3"
+    (if (withoutExt.length >= 251) withoutExt.substring(0, 251) else withoutExt) ++ ".mp3"
   }
 
   def makeEnvironment(
