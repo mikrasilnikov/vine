@@ -2,6 +2,7 @@ package pd2.providers
 
 import pd2.config.ConfigDescription.Feed
 import pd2.providers.filters.{FilterEnv, TrackFilter}
+import pd2.ui.consoleprogress.ConsoleProgress
 import zio.clock.Clock
 import zio.{Has, ZIO}
 import zio.macros.accessible
@@ -22,7 +23,7 @@ package object traxsource {
         dateTo      : LocalDate,
         filter      : TrackFilter,
         processTrack: (TrackDto, Array[Byte]) => ZIO[R, E, Unit])
-      : ZIO[R with FilterEnv with Clock, Throwable, Unit]
+      : ZIO[R with FilterEnv with ConsoleProgress with Clock, Throwable, Unit]
     }
   }
 }

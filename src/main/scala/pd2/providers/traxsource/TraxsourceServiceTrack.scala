@@ -3,9 +3,9 @@ package pd2.providers.traxsource
 import io.circe
 import io.circe.Decoder.Result
 import io.circe.{CursorOp, Decoder, HCursor}
-import pd2.providers.Pd2Exception.UnexpectedServiceResponse
+import pd2.providers.Exceptions.UnexpectedServiceResponse
 import pd2.providers.traxsource.TraxsourceServiceTrack.{TraxsourceServiceArtist, TraxsourceServiceLabel}
-import pd2.providers.{Pd2Exception, TrackDto}
+import pd2.providers.TrackDto
 import sttp.model.Uri
 
 import java.time.{Duration, LocalDate}
@@ -38,7 +38,7 @@ object TraxsourceServiceTrack {
   final case class TraxsourceServiceArtist(id: Int, tag: Int, name: String, webName : String)
   final case class TraxsourceServiceLabel(id : Int, name : String, webName : String)
 
-  private[providers] def fromServiceResponse(response: String, feed : String) : Either[Pd2Exception, List[TraxsourceServiceTrack]] =
+  private[providers] def fromServiceResponse(response: String, feed : String) : Either[Throwable, List[TraxsourceServiceTrack]] =
   {
     val tryJson = for {
       xml <- Try { scala.xml.XML.loadString(response) }

@@ -29,7 +29,8 @@ package object filters {
       def check(dto: TrackDto): ZIO[FilterEnv, Throwable, Boolean] =
         for {
           x <- self.check(dto)
-          y <- that.check(dto)
+          // Чтобы не проверять второй фильтр, если первый вернул false
+          y <- if (x) that.check(dto) else ZIO.succeed(false)
         } yield x && y
 
       override def checkBeforeProcessing(dto: TrackDto): ZIO[FilterEnv, Throwable, Boolean] =
@@ -47,6 +48,12 @@ package object filters {
     def check(dto: TrackDto): ZIO[Any, Throwable, Boolean] = ZIO.succeed(true)
     def checkBeforeProcessing(dto: TrackDto): ZIO[FilterEnv, Throwable, Boolean] = ZIO.succeed(true)
     def done(dto: TrackDto): ZIO[Any, Throwable, Unit] = ZIO.succeed()
+  }
+
+  val withArtistAndTitle = new TrackFilter {
+    def check(dto: TrackDto): ZIO[FilterEnv, Throwable, Boolean] = ZIO.succeed(dto.artist.nonEmpty && dto.title.nonEmpty)
+    def checkBeforeProcessing(dto: TrackDto): ZIO[FilterEnv, Throwable, Boolean] = check(dto)
+    def done(dto: TrackDto): ZIO[FilterEnv, Throwable, Unit] = ZIO.succeed()
   }
 
   val my  : TrackFilter = new TrackFilter {
@@ -123,7 +130,7 @@ package object filters {
     }
   }
 
-  val noShit = new TrackFilter {
+  val ignoredLabels = new TrackFilter {
     def check(dto: TrackDto): ZIO[FilterEnv, Throwable, Boolean] = for {
       shitLabels <- Config.shitLabels
     } yield shitLabels.map(_.toLowerCase).contains(dto.label.toLowerCase)
@@ -145,7 +152,7 @@ package object filters {
     tag match {
       case FilterTag.My             => my
       case FilterTag.NoCompilations => empty
-      case FilterTag.NoShit         => noShit
+      case FilterTag.IgnoredLabels  => ignoredLabels
       case FilterTag.NoEdits        => noEdits
       case FilterTag.OnlyNew        => onlyNew
     }

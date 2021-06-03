@@ -8,7 +8,7 @@ import net.ruippeixotog.scalascraper.browser.JsoupBrowser.JsoupDocument
 import net.ruippeixotog.scalascraper.dsl.DSL._
 import net.ruippeixotog.scalascraper.scraper.ContentExtractors.{element, elements}
 import pd2.providers.{Pager, TrackDto}
-import pd2.providers.Pd2Exception.UnexpectedServiceResponse
+import pd2.providers.Exceptions.UnexpectedServiceResponse
 import sttp.model.Uri
 
 import java.time.{Duration, LocalDate}

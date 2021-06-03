@@ -3,9 +3,9 @@ package pd2.providers.traxsource
 import pd2.config.Config
 import pd2.config.ConfigDescription.Feed
 import pd2.helpers.Conversions.EitherToZio
-import pd2.providers.Pd2Exception.{InternalConfigurationError, ServiceUnavailable, TraxsourceBadContentLength}
+import pd2.providers.Exceptions.{InternalConfigurationError, ServiceUnavailable, BadContentLength}
 import pd2.providers.filters.{FilterEnv, TrackFilter}
-import pd2.providers.{Pd2Exception, TrackDto}
+import pd2.providers.TrackDto
 import pd2.ui.consoleprogress.ConsoleProgress
 import pd2.ui.consoleprogress.ConsoleProgress.ProgressItem
 import sttp.client3
@@ -35,7 +35,7 @@ case class TraxsourceLive(
       dateTo        : LocalDate,
       filter        : TrackFilter,
       processTrack  : (TrackDto, Array[Byte]) => ZIO[R, E, Unit])
-  : ZIO[R with FilterEnv with Clock, Throwable, Unit] =
+  : ZIO[R with FilterEnv with ConsoleProgress with Clock, Throwable, Unit] =
   {
     for {
       _                 <- consoleProgress.acquireProgressItems(feed.name, 0)
@@ -60,69 +60,69 @@ case class TraxsourceLive(
     processTrack     : (TrackDto, Array[Byte]) => ZIO[R, E, Unit],
     pageProgressItem : Option[ProgressItem],
     pagePromiseOption: Option[Promise[Throwable, TraxsourcePage]])
-  : ZIO[R with FilterEnv with Clock, Throwable, Unit] =
+  : ZIO[R with FilterEnv with ConsoleProgress with Clock, Throwable, Unit] =
   {
     for {
-      page                    <- getTracklistWebPage(feed, dateFrom, dateTo, pageNum)
+      page                    <- getTracklistWebPage(feed, dateFrom, dateTo, None, pageNum)
                                   .tapError(e => pagePromiseOption.fold(ZIO.succeed())(promise => promise.fail(e).unit))
       _                       <- pagePromiseOption.fold(ZIO.succeed())(_.succeed(page).unit)
-      serviceTracks           <- if (page.trackIds.nonEmpty) getServiceData(page.trackIds, feed.name)
+      serviceTracks           <- if (page.trackIds.nonEmpty) getServiceData(page.trackIds, feed.name, pageProgressItem)
                                  else ZIO.succeed(List())
       _                       <- if (pageProgressItem.isDefined) consoleProgress.completeProgressItem(pageProgressItem.get)
                                   else ZIO.succeed()
       filteredTracksWithDtos  <- ZIO.filter(serviceTracks.map(st => (st, st.toTrackDto))) { case (_, dto) => filter.check(dto) }
       tracksProgress          <- consoleProgress.acquireProgressItems(feed.name, filteredTracksWithDtos.length)
       _                       <- ZIO.foreachParN_(8)(filteredTracksWithDtos zip tracksProgress) { case ((t, dto), p) =>
-                                  for {
-                                    _ <- downloadTrack(t.mp3Url)
-                                          .flatMap(bytes => processTrack(dto, bytes) *> filter.done(dto))
-                                          .whenM(filter.checkBeforeProcessing(dto))
-                                    _ <- consoleProgress.completeProgressItem(p)
-                                  } yield ()
+                                  (for {
+                                    dataOpt <- downloadTrack(t.mp3Url, p)
+                                    _ <- dataOpt match {
+                                      case Some(bytes) =>
+                                          processTrack(dto, bytes) *>
+                                          filter.done(dto) *>
+                                          consoleProgress.completeProgressItem(p)
+                                      case None =>
+                                          filter.done(dto) *>
+                                          consoleProgress.failProgressItem(p)
+                                    }
+                                  } yield ()).whenM(filter.checkBeforeProcessing(dto)
+                                              .tap(b => ZIO.unless(b)(consoleProgress.completeProgressItem(p))))
                                 }
     } yield ()
   }
 
-  private def getTracklistWebPage(feed : Feed, dateFrom : LocalDate, dateTo : LocalDate, page: Int = 1)
-  : ZIO[Clock, Pd2Exception, TraxsourcePage] =
+  private def getTracklistWebPage(
+    feed : Feed, dateFrom : LocalDate, dateTo : LocalDate, progressOpt : Option[ProgressItem], page: Int = 1)
+  : ZIO[ConsoleProgress with Clock, Throwable, TraxsourcePage] =
   {
     for {
-      pageReq   <- buildPageRequest(traxsourceHost, feed.urlTemplate, dateFrom, dateTo, page).toZio
-      pageResp  <- performRequest(pageReq).map(bytes => new String(bytes, StandardCharsets.UTF_8))
+      uri       <- buildPageUri(traxsourceHost, feed.urlTemplate, dateFrom, dateTo, page).toZio
+      pageResp  <- download(uri, progressOpt).map(bytes => new String(bytes, StandardCharsets.UTF_8))
       page      <- TraxsourcePage.parse(pageResp).toZio
     } yield page
   }
 
-  private def getServiceData(trackIds : List[Int], feed : String)
-  : ZIO[Clock, Pd2Exception, List[TraxsourceServiceTrack]] =
+  private def getServiceData(trackIds : List[Int], feed : String, progressItem : Option[ProgressItem])
+  : ZIO[ConsoleProgress with Clock, Throwable, List[TraxsourceServiceTrack]] =
   {
     for {
-      serviceReq  <- buildTraxsourceServiceRequest(trackIds).toZio
-      serviceResp <- performRequest(serviceReq).map(bytes => new String(bytes, StandardCharsets.UTF_8))
+      serviceUri  <- buildTraxsourceServiceRequest(trackIds).toZio
+      serviceResp <- download(serviceUri, progressItem).map(bytes => new String(bytes, StandardCharsets.UTF_8))
       tracks      <- TraxsourceServiceTrack.fromServiceResponse(serviceResp, feed).toZio
     } yield tracks
   }
 
-  private def downloadTrack(trackUri : Uri) : ZIO[Clock, Pd2Exception, Array[Byte]] =
+  private def downloadTrack(trackUri: Uri, progressItem : ProgressItem)
+  : ZIO[ConsoleProgress with Clock, Throwable, Option[Array[Byte]]] =
   {
-    for {
-      request <- ZIO.succeed(providerBasicRequest.get(trackUri).response(asByteArray))
-      bytes   <- performRequest(request)
-    } yield bytes
+    download(trackUri, Some(progressItem))
+      .map(Some(_))
+      .orElseSucceed(None)
   }
 
-  private def buildTraxsourceServiceRequest(trackIds : List[Int]) : Either[Pd2Exception, SttpRequest] =
+  private def buildTraxsourceServiceRequest(trackIds : List[Int]) : Either[Throwable, Uri] =
   {
     val uriStr = s"https://w-static.traxsource.com/scripts/playlist.php?tracks=${trackIds.mkString(",")}"
-
-    val eitherRequest = for {
-      uri <- Uri.parse(uriStr)
-    } yield
-      providerBasicRequest
-        .get(uri)
-        .response(asByteArray)
-
-    eitherRequest.left.map(msg => InternalConfigurationError(msg))
+    Uri.parse(uriStr).left.map(msg => InternalConfigurationError(msg))
   }
 }
 

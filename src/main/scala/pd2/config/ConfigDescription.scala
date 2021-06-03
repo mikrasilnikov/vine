@@ -1,5 +1,6 @@
 package pd2.config
 
+import scala.util.matching.Regex
 import io.circe.Decoder.Result
 import io.circe._
 import io.circe.generic.auto._
@@ -35,12 +36,28 @@ object ConfigDescription {
   object FilterTag {
     case object My              extends FilterTag
     case object OnlyNew         extends FilterTag
-    case object NoShit          extends FilterTag
+    case object IgnoredLabels   extends FilterTag
     case object NoCompilations  extends FilterTag
     case object NoEdits         extends FilterTag
   }
 
-  final case class Feed(tag: FeedTag, name: String, urlTemplate: String, filterTags: List[FilterTag])
+  final case class Feed(
+    tag: FeedTag,
+    name: String,
+    urlTemplate: String,
+    filterTags: List[FilterTag],
+    explicitPriority : Option[Int])
+  {
+    def priority : Int = explicitPriority match {
+      case Some(p) => p
+      case None =>
+        val prefix = raw"(\d+).+".r
+        name match {
+          case prefix(s) => s.toInt
+          case _ => Int.MaxValue
+        }
+    }
+  }
 
   implicit val filterTagDecoder : Decoder[FilterTag] = new Decoder[FilterTag] {
     override def apply(c: HCursor): Result[FilterTag] =
@@ -49,7 +66,7 @@ object ConfigDescription {
       } yield value match {
         case "my"               => FilterTag.My
         case "onlyNew"          => FilterTag.OnlyNew
-        case "noShit"           => FilterTag.NoShit
+        case "noShit"           => FilterTag.IgnoredLabels
         case "noCompilations"   => FilterTag.NoCompilations
         case "noEdits"          => FilterTag.NoEdits
       }
@@ -62,10 +79,11 @@ object ConfigDescription {
         provider    <- c.downField("provider").as[String]
         urlTemplate <- c.downField("urlTemplate").as[String]
         filters     <- c.downField("filters").as[List[FilterTag]]
+        priority    <- c.downField("priority").as[Option[Int]]
       } yield {
         provider match {
-          case "beatport" => Feed(FeedTag.BeatportFeed, name, urlTemplate, filters)
-          case "traxsource" => Feed(FeedTag.TraxsourceFeed, name, urlTemplate, filters)
+          case "beatport" => Feed(FeedTag.BeatportFeed, name, urlTemplate, filters, priority)
+          case "traxsource" => Feed(FeedTag.TraxsourceFeed, name, urlTemplate, filters, priority)
         }
       }
   }
