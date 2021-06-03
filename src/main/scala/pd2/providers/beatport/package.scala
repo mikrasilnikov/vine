@@ -2,7 +2,7 @@ package pd2.providers
 
 import pd2.config.ConfigDescription.Feed
 import pd2.providers.filters._
-import pd2.ui.consoleprogress.ConsoleProgress
+import pd2.ui.consoleprogress._
 import zio.{Has, ZIO}
 import zio.clock.Clock
 import zio.macros.accessible
