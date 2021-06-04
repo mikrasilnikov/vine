@@ -48,7 +48,8 @@ object ConfigDescription {
     filterTags: List[FilterTag],
     explicitPriority : Option[Int])
   {
-    def priority : Int = explicitPriority match {
+    /** Приоритет для скачивания. Параллельно скачиваются только фиды, имеющие одинаковый приоритет. */
+    val priority : Int = explicitPriority match {
       case Some(p) => p
       case None =>
         val prefix = raw"(\d+).+".r
@@ -57,6 +58,9 @@ object ConfigDescription {
           case _ => Int.MaxValue
         }
     }
+
+    /** Зависят ли результаты от диапазона дат. Например, у топа выборка от дат не зависит. */
+    val dependsOnDate : Boolean = urlTemplate.contains("{0}") && urlTemplate.contains("{1}")
   }
 
   implicit val filterTagDecoder : Decoder[FilterTag] = new Decoder[FilterTag] {

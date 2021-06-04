@@ -33,15 +33,14 @@ case class BeatportLive(
     pageNum: Int,
     filter: TrackFilter,
     processTrack: (TrackDto, Array[Byte]) => ZIO[R, E, Unit],
-    pageProgressItem: Option[ProgressItem],
+    pageProgressItem: ProgressItem,
     pagePromiseOption: Option[Promise[Throwable, Option[Pager]]])
-  : ZIO[R with FilterEnv with ConsoleProgress with Clock with Logging, Throwable, Unit] = {
+  : ZIO[R with FilterEnv with Clock with Logging, Throwable, Unit] = {
     for {
-      page                    <- getTracklistWebPage(feed, dateFrom, dateTo, None, pageNum)
+      page                    <- getTracklistWebPage(feed, dateFrom, dateTo, pageProgressItem, pageNum)
                                   .tapError(e => pagePromiseOption.fold(ZIO.succeed())(promise => promise.fail(e).unit))
       _                       <- pagePromiseOption.fold(ZIO.succeed())(_.succeed(page.pager).unit)
-      _                       <- if (pageProgressItem.isDefined) consoleProgress.completeProgressItem(pageProgressItem.get)
-                                  else ZIO.succeed()
+
       filteredTracksWithDtos  <- ZIO.filter(page.tracks.map(st => (st, st.toTrackDto(feed.name)))) { case (_, dto) => filter.check(dto) }
       tracksProgress          <- consoleProgress.acquireProgressItems(feed.name, filteredTracksWithDtos.length)
       _                       <- ZIO.foreachParN_(8)(filteredTracksWithDtos zip tracksProgress) { case ((t, dto), p) =>
@@ -59,22 +58,23 @@ case class BeatportLive(
                                 } yield ()).whenM(filter.checkBeforeProcessing(dto)
                                   .tap(b => ZIO.unless(b)(consoleProgress.completeProgressItem(p))))
                               }
+      _                       <- consoleProgress.completeProgressItem(pageProgressItem)
     } yield ()
   }
 
-  private def getTracklistWebPage(feed: Feed, dateFrom: LocalDate, dateTo: LocalDate, progressOpt : Option[ProgressItem], page: Int = 1)
-  : ZIO[ConsoleProgress with ConsoleProgress with Clock with Logging, Throwable, BeatportPage] = {
+  private def getTracklistWebPage(feed: Feed, dateFrom: LocalDate, dateTo: LocalDate, progress : ProgressItem, page: Int = 1)
+  : ZIO[Clock with Logging, Throwable, BeatportPage] = {
     for {
       pageUri   <- buildPageUri(beatportHost, feed.urlTemplate, dateFrom, dateTo, page).toZio
-      pageResp  <- download(pageUri, progressOpt).map(bytes => new String(bytes, StandardCharsets.UTF_8))
+      pageResp  <- download(pageUri, progress).map(bytes => new String(bytes, StandardCharsets.UTF_8))
       page      <- BeatportPage.parse(pageResp).toZio
     } yield page
   }
 
   private def downloadTrack(trackUri: Uri, progressItem : ProgressItem)
-  : ZIO[ConsoleProgress with Clock with Logging, Throwable, Option[Array[Byte]]] =
+  : ZIO[Clock with Logging, Throwable, Option[Array[Byte]]] =
   {
-    download(trackUri, Some(progressItem))
+    download(trackUri, progressItem)
       .map(Some(_))
       .orElseSucceed(None)
   }
