@@ -4,7 +4,7 @@ import pd2.config.Config
 import pd2.config.ConfigDescription.Feed
 import pd2.helpers.Conversions.EitherToZio
 import pd2.providers.filters.{FilterEnv, TrackFilter}
-import pd2.providers.TrackDto
+import pd2.providers.{Pager, TrackDto}
 import pd2.ui.consoleprogress.ConsoleProgress
 import pd2.ui.consoleprogress.ConsoleProgress.ProgressItem
 import sttp.client3.asByteArray
@@ -26,31 +26,7 @@ case class BeatportLive(
 
   val beatportHost = "https://www.beatport.com"
 
-  override def processTracks[R, E <: Throwable](
-    feed: Feed,
-    dateFrom: LocalDate,
-    dateTo: LocalDate,
-    filter: TrackFilter,
-    processTrack: (TrackDto, Array[Byte]) => ZIO[R, E, Unit])
-  : ZIO[R with FilterEnv with ConsoleProgress with Clock with Logging, Throwable, Unit] = {
-    for {
-      firstPagePromise  <- Promise.make[Throwable, BeatportPage]
-      firstPageFiber    <- processTracklistPage(feed, dateFrom, dateTo, 1, filter, processTrack,
-                            None, Some(firstPagePromise)).fork
-      firstPage         <- firstPagePromise.await
-      remainingProgress <- consoleProgress.acquireProgressItems(feed.name, firstPage.remainingPages.length)
-      _                 <- ZIO.foreachParN_(8)(firstPage.remainingPages zip remainingProgress) { case (page, p) =>
-                            processTracklistPage(feed, dateFrom, dateTo, page, filter, processTrack, Some(p), None)
-                          }
-      _                 <- firstPageFiber.join
-      // Если при обработке фида вообще ничего не скачивалось, то ProgressBar будет стоять на 0%.
-      // Если взять 1 ProgressItem и сразу отметить его как законченный, то ProgressBar будет показывать 100%
-      lastProgress      <- ConsoleProgress.acquireProgressItem(feed.name)
-      _                 <- ConsoleProgress.completeProgressItem(lastProgress)
-    } yield ()
-  }
-
-  private def processTracklistPage[R, E <: Throwable](
+  def processTracklistPage[R, E <: Throwable](
     feed: Feed,
     dateFrom: LocalDate,
     dateTo: LocalDate,
@@ -58,12 +34,12 @@ case class BeatportLive(
     filter: TrackFilter,
     processTrack: (TrackDto, Array[Byte]) => ZIO[R, E, Unit],
     pageProgressItem: Option[ProgressItem],
-    pagePromiseOption: Option[Promise[Throwable, BeatportPage]])
+    pagePromiseOption: Option[Promise[Throwable, Option[Pager]]])
   : ZIO[R with FilterEnv with ConsoleProgress with Clock with Logging, Throwable, Unit] = {
     for {
       page                    <- getTracklistWebPage(feed, dateFrom, dateTo, None, pageNum)
                                   .tapError(e => pagePromiseOption.fold(ZIO.succeed())(promise => promise.fail(e).unit))
-      _                       <- pagePromiseOption.fold(ZIO.succeed())(_.succeed(page).unit)
+      _                       <- pagePromiseOption.fold(ZIO.succeed())(_.succeed(page.pager).unit)
       _                       <- if (pageProgressItem.isDefined) consoleProgress.completeProgressItem(pageProgressItem.get)
                                   else ZIO.succeed()
       filteredTracksWithDtos  <- ZIO.filter(page.tracks.map(st => (st, st.toTrackDto(feed.name)))) { case (_, dto) => filter.check(dto) }
