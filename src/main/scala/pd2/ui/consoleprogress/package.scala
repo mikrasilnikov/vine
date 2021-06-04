@@ -5,6 +5,8 @@ import zio.{Has, ZIO}
 import zio.console.Console
 import zio.macros.accessible
 
+import java.io.IOException
+
 package object consoleprogress {
 
   type ConsoleProgress = Has[ConsoleProgress.Service]
@@ -16,7 +18,7 @@ package object consoleprogress {
 
     trait Service
     {
-      def drawProgress : ZIO[Any, Nothing, Unit]
+      def drawProgress : ZIO[Any, IOException, Unit]
       def acquireProgressItem(barLabel: String) : ZIO[Any, Nothing, ProgressItem]
       def acquireProgressItems(barLabel : String, amount : Int) : ZIO[Any, Nothing, List[ProgressItem]]
       def updateProgressItem(item: ProgressItem, state: ItemState) : ZIO[Any, Nothing, Unit]

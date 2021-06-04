@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration debug="false">
+
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+<!--            <pattern>%date %-5level [%thread] %logger - %message%n</pattern>-->
+            <pattern>%date %-5level %.-200message%n</pattern>
+        </encoder>
+    </appender>
+
+    <root level="all">
+        <appender-ref ref="CONSOLE" />
+    </root>
+
+    <receiver class="ch.qos.logback.classic.net.SocketReceiver">
+        <remoteHost>127.0.0.1</remoteHost>
+        <port>8089</port>
+        <reconnectionDelay>1000</reconnectionDelay>
+    </receiver>
+
+</configuration>

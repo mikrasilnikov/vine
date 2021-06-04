@@ -3,7 +3,7 @@ package pd2.providers.traxsource
 import pd2.config.Config
 import pd2.config.ConfigDescription.Feed
 import pd2.helpers.Conversions.EitherToZio
-import pd2.providers.Exceptions.{InternalConfigurationError, ServiceUnavailable, BadContentLength}
+import pd2.providers.Exceptions.{BadContentLength, InternalConfigurationError, ServiceUnavailable}
 import pd2.providers.filters.{FilterEnv, TrackFilter}
 import pd2.providers.TrackDto
 import pd2.ui.consoleprogress.ConsoleProgress
@@ -15,6 +15,7 @@ import sttp.model.{HeaderNames, Uri}
 import zio.clock.Clock
 import zio.console.putStrLn
 import zio.duration.durationInt
+import zio.logging.Logging
 import zio.{Promise, Schedule, Semaphore, ZIO, ZLayer}
 
 import java.nio.charset.StandardCharsets
@@ -35,7 +36,7 @@ case class TraxsourceLive(
       dateTo        : LocalDate,
       filter        : TrackFilter,
       processTrack  : (TrackDto, Array[Byte]) => ZIO[R, E, Unit])
-  : ZIO[R with FilterEnv with ConsoleProgress with Clock, Throwable, Unit] =
+  : ZIO[R with FilterEnv with ConsoleProgress with Clock with Logging, Throwable, Unit] =
   {
     for {
       firstPagePromise  <- Promise.make[Throwable, TraxsourcePage]
@@ -63,7 +64,7 @@ case class TraxsourceLive(
     processTrack     : (TrackDto, Array[Byte]) => ZIO[R, E, Unit],
     pageProgressItem : Option[ProgressItem],
     pagePromiseOption: Option[Promise[Throwable, TraxsourcePage]])
-  : ZIO[R with FilterEnv with ConsoleProgress with Clock, Throwable, Unit] =
+  : ZIO[R with FilterEnv with ConsoleProgress with Clock with Logging, Throwable, Unit] =
   {
     for {
       page                    <- getTracklistWebPage(feed, dateFrom, dateTo, None, pageNum)
@@ -95,7 +96,7 @@ case class TraxsourceLive(
 
   private def getTracklistWebPage(
     feed : Feed, dateFrom : LocalDate, dateTo : LocalDate, progressOpt : Option[ProgressItem], page: Int = 1)
-  : ZIO[ConsoleProgress with Clock, Throwable, TraxsourcePage] =
+  : ZIO[ConsoleProgress with Clock with Logging, Throwable, TraxsourcePage] =
   {
     for {
       uri       <- buildPageUri(traxsourceHost, feed.urlTemplate, dateFrom, dateTo, page).toZio
@@ -105,7 +106,7 @@ case class TraxsourceLive(
   }
 
   private def getServiceData(trackIds : List[Int], feed : String, progressItem : Option[ProgressItem])
-  : ZIO[ConsoleProgress with Clock, Throwable, List[TraxsourceServiceTrack]] =
+  : ZIO[ConsoleProgress with Clock with Logging, Throwable, List[TraxsourceServiceTrack]] =
   {
     for {
       serviceUri  <- buildTraxsourceServiceRequest(trackIds).toZio
@@ -115,7 +116,7 @@ case class TraxsourceLive(
   }
 
   private def downloadTrack(trackUri: Uri, progressItem : ProgressItem)
-  : ZIO[ConsoleProgress with Clock, Throwable, Option[Array[Byte]]] =
+  : ZIO[ConsoleProgress with Clock with Logging, Throwable, Option[Array[Byte]]] =
   {
     download(trackUri, Some(progressItem))
       .map(Some(_))

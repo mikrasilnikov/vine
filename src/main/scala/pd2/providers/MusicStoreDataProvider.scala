@@ -14,6 +14,7 @@ import pd2.helpers.Conversions._
 import pd2.ui.ProgressBar
 import pd2.ui.consoleprogress.ConsoleProgress
 import pd2.ui.consoleprogress.ConsoleProgress.ProgressItem
+import zio.logging._
 
 import java.time.LocalDate
 
@@ -31,7 +32,7 @@ trait MusicStoreDataProvider {
       dateTo      : LocalDate,
       filter      : TrackFilter,
       processTrack: (TrackDto, Array[Byte]) => ZIO[R, E, Unit])
-    : ZIO[R with FilterEnv with ConsoleProgress with Clock, Throwable, Unit]
+    : ZIO[R with FilterEnv with ConsoleProgress with Clock with Logging, Throwable, Unit]
 
     protected val providerBasicRequest = basicRequest
       .header(HeaderNames.UserAgent,
@@ -68,7 +69,7 @@ trait MusicStoreDataProvider {
      * попыток возващает последнюю ошибку.
      */
     protected def download(uri : Uri, progressItem : Option[ProgressItem])
-    : ZIO[ConsoleProgress with Clock, Throwable, Array[Byte]] =
+    : ZIO[ConsoleProgress with Clock with Logging, Throwable, Array[Byte]] =
     {
         def send(req : SttpRequest) : ZIO[Clock, Throwable, Array[Byte]] = for {
             resp        <- sttpClient.send(req).timeoutFail(ServiceUnavailable("Timeout", uri))(5.minutes)
@@ -85,9 +86,13 @@ trait MusicStoreDataProvider {
                                 case Some(item) => ConsoleProgress.updateProgressItem(item, ProgressBar.InProgress)
                                 case None => ZIO.succeed()
             }
-            resp            <- globalSemaphore.withPermit(providerSemaphore.withPermit(
-                                send(req).tapError(_ => updateProgress)))
+            resp            <- globalSemaphore.withPermit(
+                                    providerSemaphore.withPermit(
+                                        log.trace(s"$uri") *>
+                                        send(req).tapError(_ => updateProgress)
+                                ))
                                 .retry(schedule)
+                                .tapError(e => log.warn(s"Could not download $uri, error: $e"))
         } yield resp
     }
 }

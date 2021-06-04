@@ -6,7 +6,6 @@ import net.ruippeixotog.scalascraper.model.Document
 import net.ruippeixotog.scalascraper.scraper.ContentExtractors.{attr, attrs, element, elements}
 import pd2.providers.Pager
 import pd2.providers.Exceptions._
-
 import scala.util.{Failure, Success, Try}
 
 

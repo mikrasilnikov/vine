@@ -5,6 +5,7 @@ import pd2.providers.filters._
 import pd2.ui.consoleprogress._
 import zio.{Has, ZIO}
 import zio.clock.Clock
+import zio.logging.Logging
 import zio.macros.accessible
 
 import java.time.LocalDate
@@ -22,7 +23,7 @@ package object beatport {
         dateTo      : LocalDate,
         filter      : TrackFilter,
         processTrack: (TrackDto, Array[Byte]) => ZIO[R, E, Unit])
-      : ZIO[R with FilterEnv with ConsoleProgress with Clock, Throwable, Unit]
+      : ZIO[R with FilterEnv with ConsoleProgress with Clock with Logging, Throwable, Unit]
     }
   }
 }

@@ -5,6 +5,7 @@ import pd2.data.DatabaseService
 import pd2.data.test.{TestBackend, TestDatabaseService, TrackTestDataBuilder}
 import pd2.providers.TrackDto
 import zio.ZIO
+import zio.logging.slf4j.Slf4jLogger
 import zio.test.Assertion.{equalTo, isFalse, isTrue}
 import zio.test.mock.Expectation._
 import zio.test.{DefaultRunnableSpec, assert}
@@ -39,7 +40,7 @@ object OnlyNewFilterSuite extends DefaultRunnableSpec {
           } yield assert(actual)(isTrue) && assert(count)(equalTo(0))
 
           test.provideCustomLayer(
-            TestBackend.makeLayer >>> TestDatabaseService.makeLayer ++ configMock)
+            TestBackend.makeLayer >>> TestDatabaseService.makeLayer ++ configMock ++ Slf4jLogger.make((_, s) => s))
         },
 
       testM("OnlyNewFilter.check - existing completed") {
@@ -72,7 +73,7 @@ object OnlyNewFilterSuite extends DefaultRunnableSpec {
         } yield assert(actual)(isFalse) && assert(count)(equalTo(1))
 
         test.provideCustomLayer(
-          TestBackend.makeLayer >>> TestDatabaseService.makeLayer ++ configMock)
+          TestBackend.makeLayer >>> TestDatabaseService.makeLayer ++ configMock ++ Slf4jLogger.make((_, s) => s))
       },
 
       testM("OnlyNewFilter.check - existing queued in previous run") {
@@ -111,7 +112,7 @@ object OnlyNewFilterSuite extends DefaultRunnableSpec {
           assert(track0)(equalTo(dbTracks.head))
 
         test.provideCustomLayer(
-          TestBackend.makeLayer >>> TestDatabaseService.makeLayer ++ configMock)
+          TestBackend.makeLayer >>> TestDatabaseService.makeLayer ++ configMock ++ Slf4jLogger.make((_, s) => s))
       },
 
       testM("OnlyNewFilter.check - existing queued in same run") {
@@ -150,7 +151,7 @@ object OnlyNewFilterSuite extends DefaultRunnableSpec {
             assert(track0)(equalTo(dbTracks.head))
 
         test.provideCustomLayer(
-          TestBackend.makeLayer >>> TestDatabaseService.makeLayer ++ configMock)
+          TestBackend.makeLayer >>> TestDatabaseService.makeLayer ++ configMock ++ Slf4jLogger.make((_, s) => s))
       },
 
 
@@ -190,7 +191,7 @@ object OnlyNewFilterSuite extends DefaultRunnableSpec {
           assert(expectedDbTrack)(equalTo(dbTracks.head))
 
         test.provideCustomLayer(
-          TestBackend.makeLayer >>> TestDatabaseService.makeLayer ++ configMock)
+          TestBackend.makeLayer >>> TestDatabaseService.makeLayer ++ configMock ++ Slf4jLogger.make((_, s) => s))
       },
 
       testM("OnlyNewFilter.checkBeforeProcessing - existing completed") {
@@ -225,7 +226,7 @@ object OnlyNewFilterSuite extends DefaultRunnableSpec {
             assert(dbTracks.head)(equalTo(track0))
 
         test.provideCustomLayer(
-          TestBackend.makeLayer >>> TestDatabaseService.makeLayer ++ configMock)
+          TestBackend.makeLayer >>> TestDatabaseService.makeLayer ++ configMock ++ Slf4jLogger.make((_, s) => s))
       },
 
       testM("OnlyNewFilter.checkBeforeProcessing - existing queued in previous run") {
@@ -265,7 +266,7 @@ object OnlyNewFilterSuite extends DefaultRunnableSpec {
             assert(expectedTrack)(equalTo(dbTracks.head))
 
         test.provideCustomLayer(
-          TestBackend.makeLayer >>> TestDatabaseService.makeLayer ++ configMock)
+          TestBackend.makeLayer >>> TestDatabaseService.makeLayer ++ configMock ++ Slf4jLogger.make((_, s) => s))
       },
 
       testM("OnlyNewFilter.checkBeforeProcessing - existing queued in same run") {
@@ -304,7 +305,7 @@ object OnlyNewFilterSuite extends DefaultRunnableSpec {
             assert(track0)(equalTo(dbTracks.head))
 
         test.provideCustomLayer(
-          TestBackend.makeLayer >>> TestDatabaseService.makeLayer ++ configMock)
+          TestBackend.makeLayer >>> TestDatabaseService.makeLayer ++ configMock ++ Slf4jLogger.make((_, s) => s))
       },
     )
 }

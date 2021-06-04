@@ -1,19 +1,19 @@
 package pd2.providers
 
-import org.joda.time.LocalDateTime
 import pd2.config.ConfigDescription.FilterTag
 import pd2.config.Config
 import pd2.data.{DatabaseService, Pd2Database, Track}
 import zio.{Has, ZIO}
 import slick.dbio._
+import zio.logging.{Logging, log}
 
-import java.time.Duration
+import java.time.{Duration, LocalDateTime}
 
 package object filters {
 
   implicit val ec: scala.concurrent.ExecutionContext = scala.concurrent.ExecutionContext.global
 
-  type FilterEnv = Config with Pd2Database
+  type FilterEnv = Config with Pd2Database with Logging
 
   trait TrackFilter { self =>
     /** Проверяет, подходит ли трек, но не вносит никаких изменений в состояние (например, не пишет ничего в базу) */
@@ -51,7 +51,11 @@ package object filters {
   }
 
   val withArtistAndTitle = new TrackFilter {
-    def check(dto: TrackDto): ZIO[FilterEnv, Throwable, Boolean] = ZIO.succeed(dto.artist.nonEmpty && dto.title.nonEmpty)
+    def check(dto: TrackDto): ZIO[FilterEnv, Throwable, Boolean] =
+      for {
+        result  <- ZIO.succeed(dto.artist.nonEmpty && dto.title.nonEmpty)
+        _       <- log.warn(s"Missing required field for track $dto").unless(result)
+    } yield result
     def checkBeforeProcessing(dto: TrackDto): ZIO[FilterEnv, Throwable, Boolean] = check(dto)
     def done(dto: TrackDto): ZIO[FilterEnv, Throwable, Unit] = ZIO.succeed()
   }
@@ -72,6 +76,17 @@ package object filters {
 
   val onlyNew : TrackFilter = new TrackFilter
   {
+    /**
+     * Результат проверки трека на новизну.
+     * Так как внутри транзакции нельзя выполнять произвольные эффекты,
+     * это значение возвращается из транзакции и логируется на отдельном этапе.
+     */
+    sealed trait CheckResult
+    final case object IsNew extends CheckResult
+    final case class Downloaded(existingArtist : String, existingTitle : String) extends CheckResult
+    final case object InProcess extends CheckResult
+    final case class Failed(runId : LocalDateTime) extends CheckResult
+
     def check(dto: TrackDto): ZIO[FilterEnv, Throwable, Boolean] = checkCore(dto, false)
     def checkBeforeProcessing(dto: TrackDto): ZIO[FilterEnv, Throwable, Boolean] = checkCore(dto, true)
 
@@ -89,7 +104,8 @@ package object filters {
         } yield ()
       }
 
-    private def checkCore(dto: TrackDto, updateDb : Boolean): ZIO[Config with Pd2Database, Throwable, Boolean] =
+    private def checkCore(dto: TrackDto, updateDb : Boolean)
+    : ZIO[Config with Pd2Database with Logging, Throwable, Boolean] =
     {
       ZIO.service[DatabaseService].flatMap { db =>
         import db.profile.api._
@@ -99,33 +115,48 @@ package object filters {
 
           transaction = for {
             existingTrackOpt <- db.tracks.filter(t => t.uniqueName === newTrack.uniqueName).result
-            //_ <- DBIO.successful(println(existingTrackOpt))
             res0 <- existingTrackOpt.headOption match {
               // Ранее такого трека мы не видели.
               case None =>  {
-                if (updateDb) (db.tracks += newTrack) >> DBIO.successful(true)
-                else DBIO.successful(true)
+                if (updateDb)
+                    (db.tracks += newTrack) >>
+                    DBIO.successful(IsNew)
+                else
+                    DBIO.successful(IsNew)
               }
               case Some(existingTrack) =>
                 existingTrack.queued match {
                   // Такой трек раньше встречался и его уже скачали.
-                  case None => DBIO.successful(false)
+                  case None => DBIO.successful(Downloaded(existingTrack.artist, existingTrack.title))
                   // Трек уже видели при текущем запуске (например, другой fiber его уже скачивает).
-                  case Some(id) if id == runId  => DBIO.successful(false)
+                  case Some(id) if id == runId  => DBIO.successful(InProcess)
                   // Трек видели при предыдущем запуске, но не скачали. Например, из-за ошибки.
                   case Some(_) => {
                     if (updateDb)
                       // проставляем треку текущий runId
-                      db.tracks.filter(_.id === existingTrack.id).map(_.queued).update(Some(runId)) >> DBIO.successful(true)
+                        db.tracks.filter(_.id === existingTrack.id).map(_.queued).update(Some(runId)) >>
+                        DBIO.successful(Failed(existingTrack.queued.get))
                     else
-                      DBIO.successful(true)
+                        DBIO.successful(Failed(existingTrack.queued.get))
                   }
                 }
             }
           } yield res0
 
-          res1 <- db.run(transaction.transactionally)
-        } yield res1
+          checkResult <- db.run(transaction.transactionally)
+
+          result <- checkResult match {
+            case IsNew => ZIO.succeed(true)
+            case Downloaded(a, t) =>
+              log.info(s"Track deduplicated. \n\t${dto.artist} - ${dto.title} \n\t$a - $t")
+                .as(false)
+            case InProcess => ZIO.succeed(false)
+            case Failed(on) =>
+              log.info(s"Restarting failed download: ${dto.artist} - ${dto.title} Failed on $on")
+                .as(true)
+          }
+
+        } yield result
       }
     }
   }

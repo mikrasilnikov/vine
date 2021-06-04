@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+  <appender name="FILE" class="ch.qos.logback.core.FileAppender">
+    <file>PreviewsDownloader2.log</file>
+    <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+      <level>INFO</level>
+    </filter>
+    <encoder>
+      <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+    </encoder>
+  </appender>
+
+  <appender name="SERVER" class="ch.qos.logback.classic.net.server.ServerSocketAppender">
+    <port>8089</port>
+    <includeCallerData>true</includeCallerData>
+  </appender>
+
+  <root level="all">
+  </root>
+
+  <logger name="slick" level="off" />
+  <logger name="pd2" level="all">
+    <appender-ref ref="SERVER" />
+    <appender-ref ref="FILE" />
+  </logger>
+
+<!--  <logger name="slick.jdbc.JdbcBackend.benchmark" level="debug" />-->
+<!--  <logger name="slick.jdbc.StatementInvoker.result" level="debug" />-->
+
+</configuration>

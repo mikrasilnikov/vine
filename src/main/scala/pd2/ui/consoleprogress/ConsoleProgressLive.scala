@@ -10,6 +10,7 @@ import zio.system.System
 import zio.console.{Console, putStrLn}
 import zio.{Has, Ref, RefM, Task, ZIO, ZLayer}
 
+import java.io.IOException
 import java.time.LocalTime
 import scala.collection.mutable.ArrayBuffer
 
@@ -53,7 +54,7 @@ final case class ConsoleProgressLive(
     : ZIO[Any, Nothing, ProgressItem] =
     acquireProgressItems(batchName, 1).map(_.head)
 
-  def drawProgress: ZIO[Any, Nothing, Unit] = {
+  def drawProgress: ZIO[Any, IOException, Unit] = {
     import java.time.temporal.ChronoUnit
     for {
 
@@ -71,7 +72,7 @@ final case class ConsoleProgressLive(
     } yield ()
   }
 
-  private def drawProgressBar(bar: ProgressBar, tick : Long): ZIO[Any, Nothing, Unit] = {
+  private def drawProgressBar(bar: ProgressBar, tick : Long): ZIO[Any, IOException, Unit] = {
     for {
       _ <- ZIO.succeed()
       render = ProgressBar.render(bar, tick)

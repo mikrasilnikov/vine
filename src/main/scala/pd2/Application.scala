@@ -1,4 +1,8 @@
 package pd2
+import ch.qos.logback.classic.LoggerContext
+import ch.qos.logback.classic.joran.JoranConfigurator
+import org.slf4j.LoggerFactory
+import pd2.LogReceiver.getClass
 import pd2.config.Config
 import pd2.config.ConfigDescription.{Feed, FeedTag, FilterTag}
 import pd2.data.{Backend, DatabaseService}
@@ -17,6 +21,8 @@ import zio.system.System
 import pd2.providers.filters.FilterEnv
 import zio.clock.Clock
 import zio.{Chunk, ExitCode, Has, Ref, Schedule, URIO, ZIO, ZLayer, clock}
+import zio.logging._
+import zio.logging.slf4j.Slf4jLogger
 
 import java.time.format.DateTimeFormatter
 import java.time.{LocalDate, LocalDateTime}
@@ -25,6 +31,8 @@ import scala.util.Try
 object Application extends zio.App {
 
   def run(args: List[String]): URIO[zio.ZEnv, ExitCode] = {
+
+    configureLogging()
 
     val explicitPeriodOption = for {
       dateFrom  <- getParamOption(args, "--dateFrom", LocalDate.parse)
@@ -42,13 +50,14 @@ object Application extends zio.App {
       maxConn     <- getParamOption(args, "--maxConnections", _.toInt).orElse(Some(16))
     } yield makeEnvironment(
       maxConnections = maxConn,
-      barDimensions = ProgressBarDimensions(30, 65),
+      barDimensions = ProgressBarDimensions(27, 65),
       configFilePath = configPath,
       dbFilePath  = dbPath,
       dateFrom = from,
       dateTo = to)
 
     val effect = for {
+      _             <- log.info("Application starting...")
       previewsBase  <- Config.previewsBasePath
       _             <- Files.createDirectory(previewsBase).whenM(Files.notExists(previewsBase))
 
@@ -73,7 +82,7 @@ object Application extends zio.App {
       _             <- putStrLn(s"\ntotal tracks: ${processed.length}")
     } yield ()
 
-    def logErrors[R,E,A](effect : ZIO[R,E,A]) = effect
+    def logErrors[R,E,A](effect : ZIO[R,E,A]): ZIO[Blocking with Config with R, Any, A] = effect
       .tapCause(e => for {
         now       <- ZIO.effectTotal(LocalDateTime.now())
         appPath   <- Config.appPath
@@ -89,7 +98,7 @@ object Application extends zio.App {
     }
   }
 
-  def printUsage : ZIO[Console, Nothing, Unit] = for {
+  def printUsage : ZIO[Console, Throwable, Unit] = for {
     _ <- putStrLn("Examples:")
     _ <- putStrLn("java -cp PreviewsDownloader2.jar pd2.Application --date=2021-05-01")
     _ <- putStrLn("java -cp PreviewsDownloader2.jar pd2.Application --dateFrom=2021-05-01 --dateTo=2021-05-07")
@@ -107,7 +116,7 @@ object Application extends zio.App {
 
   def processFeed(feed : Feed, refDtos : Ref[List[TrackDto]])
   : ZIO[
-    Traxsource with Beatport with FilterEnv with Blocking with ConsoleProgress with Clock,
+    Traxsource with Beatport with FilterEnv with Blocking with ConsoleProgress with Clock with Logging,
     Throwable, Unit] =
     for {
       feedFilter  <- ZIO.succeed(feed.filterTags
@@ -121,12 +130,13 @@ object Application extends zio.App {
     } yield ()
 
   def processTrack(dto: TrackDto, data: Array[Byte], refDtos : Ref[List[TrackDto]])
-  : ZIO[Blocking with Config, Throwable, Unit] =
+  : ZIO[Blocking with Config with Logging, Throwable, Unit] =
   {
     def fixPath(s : String) : String =
       s.replaceAll("([<>:\"/\\\\|?*])", "_")
 
     for {
+      _             <- dto.uniqueNameZio.flatMap(name => log.trace(s"Processing track $name"))
       previewsBase  <- Config.previewsBasePath
       feedPath      =  previewsBase / Path(dto.feed)
       _             <- Files.createDirectory(feedPath).whenM(Files.notExists(feedPath))
@@ -153,7 +163,7 @@ object Application extends zio.App {
   : ZLayer[
     Console with Blocking,
     Throwable,
-    Traxsource with Beatport with ConsoleProgress with Config with Has[DatabaseService]] =
+    Traxsource with Beatport with ConsoleProgress with Config with Has[DatabaseService] with Logging] =
   {
     import sttp.client3.httpclient.zio.HttpClientZioBackend
 
@@ -170,6 +180,22 @@ object Application extends zio.App {
       Backend.makeLayer(SQLiteProfile, Backend.makeSqliteLiveConfig(dbFilePath)) >>>
       DatabaseService.makeLayer(SQLiteProfile)
 
-    traxsourceLive ++ beatportLive ++ consoleProgress ++ configLayer ++ database
+    val logging = Slf4jLogger.make { (context:LogContext, message) =>
+      val logFormat = "[correlation-id = %s] %s"
+      val correlationId = LogAnnotation.CorrelationId.render(
+        context.get(LogAnnotation.CorrelationId)
+      )
+      //logFormat.format(correlationId, message)
+      message
+    }
+    traxsourceLive ++ beatportLive ++ consoleProgress ++ configLayer ++ database ++ logging
+  }
+
+  def configureLogging(): Unit = {
+    val context = LoggerFactory.getILoggerFactory.asInstanceOf[LoggerContext]
+    val configurator = new JoranConfigurator()
+    configurator.setContext(context)
+    context.reset()
+    configurator.doConfigure(getClass.getResourceAsStream("/logback-main.xml"))
   }
 }
