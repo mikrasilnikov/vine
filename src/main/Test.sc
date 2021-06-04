@@ -1,12 +1,15 @@
-
-
-
 import java.time.format.DateTimeFormatter
 import java.time.{Duration, LocalDate, LocalDateTime, Period}
+import scala.util.matching.Regex
 
-val dateFrom = LocalDate.parse("2021-05-01")
-val dateTo = LocalDate.parse("2021-05-03")
+val artist = "Jay J"
 
-(0 until Period.between(dateFrom, dateTo).getDays).map(i => dateFrom.plusDays(i))
+Regex.quote(artist)
+val regex = ("(\\W|^)" + Regex.quote(artist) + "(\\W|$)").r
 
+regex.findFirstIn("Jay J")
+regex.findFirstIn("Jay Jayson")
+regex.findFirstIn("Jay J, Artist2")
+regex.findFirstIn("Artistq&Jay J, Artist2")
+regex.findFirstIn("Artistq & Jay J")
 

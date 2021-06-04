@@ -8,6 +8,7 @@ import slick.dbio._
 import zio.logging.{Logging, log}
 
 import java.time.{Duration, LocalDateTime}
+import scala.util.matching.Regex
 
 package object filters {
 
@@ -50,7 +51,7 @@ package object filters {
     def done(dto: TrackDto): ZIO[Any, Throwable, Unit] = ZIO.succeed()
   }
 
-  val withArtistAndTitle = new TrackFilter {
+  val withArtistAndTitle : TrackFilter = new TrackFilter {
     def check(dto: TrackDto): ZIO[FilterEnv, Throwable, Boolean] =
       for {
         result  <- ZIO.succeed(dto.artist.nonEmpty && dto.title.nonEmpty)
@@ -60,14 +61,21 @@ package object filters {
     def done(dto: TrackDto): ZIO[FilterEnv, Throwable, Unit] = ZIO.succeed()
   }
 
-  val my  : TrackFilter = new TrackFilter {
+  val my : TrackFilter = new TrackFilter {
     def check(dto: TrackDto): ZIO[Config, Throwable, Boolean] = {
       for {
-        artists   <- Config.myArtists
-        labels    <- Config.myLabels
-        myArtist  =  artists.exists(a => dto.artist.toLowerCase.contains(a.toLowerCase)) ||
-                     artists.exists(a => dto.title.toLowerCase.contains(a.toLowerCase))
-        myLabel   =  labels.exists(l => l.toLowerCase == dto.label.toLowerCase)
+        artists         <- Config.myArtists
+        labels          <- Config.myLabels
+        dtoArtistLower  = dto.artist.toLowerCase
+        dtoTitleLower   = dto.title.toLowerCase
+
+        myArtist = artists.exists { a =>
+          val regex = ("(\\W|^)" + Regex.quote(a.toLowerCase) + "(\\W|$)").r
+          regex.findFirstIn(dtoArtistLower).isDefined ||
+          regex.findFirstIn(dtoTitleLower).isDefined
+        }
+
+        myLabel = labels.exists(l => l.toLowerCase == dto.label.toLowerCase)
       } yield myArtist || myLabel
     }
     def checkBeforeProcessing(dto: TrackDto): ZIO[FilterEnv, Throwable, Boolean] = check(dto)
@@ -152,7 +160,7 @@ package object filters {
                 .as(false)
             case InProcess => ZIO.succeed(false)
             case Failed(on) =>
-              log.info(s"Restarting failed download: ${dto.artist} - ${dto.title} Failed on $on")
+              log.info(s"Restarting failed download: ${dto.artist} - ${dto.title}. Failed on $on")
                 .as(true)
           }
 
@@ -161,7 +169,7 @@ package object filters {
     }
   }
 
-  val ignoredLabels = new TrackFilter {
+  val ignoredLabels : TrackFilter = new TrackFilter {
     def check(dto: TrackDto): ZIO[FilterEnv, Throwable, Boolean] = for {
       shitLabels <- Config.shitLabels
     } yield shitLabels.map(_.toLowerCase).contains(dto.label.toLowerCase)

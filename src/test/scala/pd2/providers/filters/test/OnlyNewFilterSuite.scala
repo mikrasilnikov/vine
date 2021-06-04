@@ -9,7 +9,6 @@ import zio.logging.slf4j.Slf4jLogger
 import zio.test.Assertion.{equalTo, isFalse, isTrue}
 import zio.test.mock.Expectation._
 import zio.test.{DefaultRunnableSpec, assert}
-
 import java.time.{Duration, LocalDate, LocalDateTime}
 
 object OnlyNewFilterSuite extends DefaultRunnableSpec {
