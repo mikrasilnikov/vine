@@ -38,6 +38,12 @@ object TrackParsing {
 
   def rewriteTrackName(parsedArtists : List[Artist], parsedTitle : Title) : String = {
 
+    // Эти обозначения миксов будем заменять на пустую строку, потому что
+    // Artist - Title (Original Mix) и
+    // Artist - Title
+    // - это одинаковые названия.
+    val originalMixes = List("(Original)", "(Original Mix)").map(_.toLowerCase)
+
     def getAllNames(artist : Artist) : List[String] = artist match {
       case Single(name) => List(name)
       case Feat(a1, a2) => getAllNames(a1) ++ getAllNames(a2)
@@ -56,7 +62,13 @@ object TrackParsing {
         .distinct
         .sorted
 
-    s"${artistNames.mkString(", ")} - ${parsedTitle.actualTitle}${parsedTitle.mix.map(" " + _).getOrElse("")}"
+    val effectiveMix = parsedTitle.mix match {
+      case None => ""
+      case Some(mix) if originalMixes.contains(mix.toLowerCase) => ""
+      case Some(mix) => s" $mix"
+    }
+
+    s"${artistNames.mkString(", ")} - ${parsedTitle.actualTitle}${effectiveMix}"
   }
 
   /**

@@ -48,13 +48,15 @@ object Application extends zio.App {
       configPath  <- getParamOption(args, "--config", Path.apply(_)).orElse(Some(Path("config.json")))
       dbPath      <- getParamOption(args, "--database", Path.apply(_)).orElse(Some(Path("data.db")))
       maxConn     <- getParamOption(args, "--maxConnections", _.toInt).orElse(Some(16))
+      download    <- getParamOption(args, "--downloadTracks", _.toBoolean).orElse(Some(true))
     } yield makeEnvironment(
       maxConnections = maxConn,
       barDimensions = ProgressBarDimensions(27, 65),
       configFilePath = configPath,
       dbFilePath  = dbPath,
       dateFrom = from,
-      dateTo = to)
+      dateTo = to,
+      downloadTracks = download)
 
     val effect = for {
       _             <- log.info("Application starting...")
@@ -159,7 +161,8 @@ object Application extends zio.App {
     configFilePath  : Path,
     dbFilePath      : Path,
     dateFrom        : LocalDate,
-    dateTo          : LocalDate)
+    dateTo          : LocalDate,
+    downloadTracks  : Boolean)
   : ZLayer[
     Console with Blocking,
     Throwable,
@@ -167,7 +170,7 @@ object Application extends zio.App {
   {
     import sttp.client3.httpclient.zio.HttpClientZioBackend
 
-    val configLayer = Config.makeLayer(configFilePath, dateFrom, dateTo, maxConnections)
+    val configLayer = Config.makeLayer(configFilePath, dateFrom, dateTo, maxConnections, downloadTracks)
     val consoleProgress = (System.live ++ Console.live) >>> ConsoleProgressLive.makeLayer(barDimensions)
 
     val traxsourceLive = configLayer ++

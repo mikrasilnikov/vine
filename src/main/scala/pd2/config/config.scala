@@ -31,6 +31,7 @@ package object config {
       def runId               : LocalDateTime
       def globalConnSemaphore : Semaphore
       def appPath             : Path
+      def downloadTracks      : Boolean
     }
 
     /**
@@ -40,10 +41,11 @@ package object config {
      * @param globalConnectionsLimit максимальное количество параллельных соединений
      */
     def makeLayer(
-      filePath : Path,
-      from : LocalDate,
-      to : LocalDate,
-      globalConnectionsLimit: Int)
+      filePath                : Path,
+      from                    : LocalDate,
+      to                      : LocalDate,
+      globalConnectionsLimit  : Int,
+      doDownloadTracks        : Boolean)
     : ZLayer[Console with Blocking, Throwable, Config] = {
 
       val make = for {
@@ -81,6 +83,7 @@ package object config {
         val runId : LocalDateTime = localDt
         val globalConnSemaphore : Semaphore = gSemaphore
         val appPath : Path = jarPath
+        val downloadTracks : Boolean = doDownloadTracks
       }
 
       make.toLayer

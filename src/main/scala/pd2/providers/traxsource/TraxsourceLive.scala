@@ -52,15 +52,18 @@ case class TraxsourceLive(
       tracksProgress          <- consoleProgress.acquireProgressItems(feed.name, filteredTracksWithDtos.length)
       _                       <- ZIO.foreachParN_(8)(filteredTracksWithDtos zip tracksProgress) { case ((t, dto), p) =>
                                   (for {
-                                    dataOpt <- downloadTrack(t.mp3Url, p)
-                                    _ <- dataOpt match {
-                                      case Some(bytes) =>
-                                          processTrack(dto, bytes) *>
+                                    downloadResult <- downloadTrack(t.mp3Url, p)
+                                    _ <- downloadResult match {
+                                      case TrackDownloadResult.Success(bytes) =>
+                                        processTrack(dto, bytes) *>
                                           filter.done(dto) *>
                                           consoleProgress.completeProgressItem(p)
-                                      case None =>
-                                          filter.done(dto) *>
+                                      case TrackDownloadResult.Failure =>
+                                        filter.done(dto) *>
                                           consoleProgress.failProgressItem(p)
+                                      case TrackDownloadResult.Skipped =>
+                                        filter.done(dto) *>
+                                          consoleProgress.completeProgressItem(p)
                                     }
                                   } yield ()).whenM(filter.checkBeforeProcessing(dto)
                                               .tap(b => ZIO.unless(b)(consoleProgress.completeProgressItem(p))))
@@ -88,14 +91,6 @@ case class TraxsourceLive(
       serviceResp <- download(serviceUri, progressItem).map(bytes => new String(bytes, StandardCharsets.UTF_8))
       tracks      <- TraxsourceServiceTrack.fromServiceResponse(serviceResp, feed).toZio
     } yield tracks
-  }
-
-  private def downloadTrack(trackUri: Uri, progressItem : ProgressItem)
-  : ZIO[Clock with Logging, Throwable, Option[Array[Byte]]] =
-  {
-    download(trackUri, progressItem)
-      .map(Some(_))
-      .orElseSucceed(None)
   }
 
   private def buildTraxsourceServiceRequest(trackIds : List[Int]) : Either[Throwable, Uri] =

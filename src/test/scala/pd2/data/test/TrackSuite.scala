@@ -214,6 +214,22 @@ object TrackSuite extends DefaultRunnableSpec {
           val expected = Title("We're Funkin' ♫♫♫ !!!", None, Some("(Original Dub)"))
           assert(result)(isSome(equalTo(expected)))
         },
+
+        test("Original mix removal 1") {
+          val artist = TP.parseArtists("Artist")
+          val title = TP.parseTitle("Title (Original Mix)")
+          val expected = "Artist - Title"
+          val actual = TP.rewriteTrackName(artist.get, title.get)
+          assert(actual)(equalTo(expected))
+        },
+
+        test("Original mix removal 2") {
+          val artist = TP.parseArtists("Artist")
+          val title = TP.parseTitle("Title (Original)")
+          val expected = "Artist - Title"
+          val actual = TP.rewriteTrackName(artist.get, title.get)
+          assert(actual)(equalTo(expected))
+        },
       )
     )
   }

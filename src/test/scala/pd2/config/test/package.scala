@@ -21,6 +21,7 @@ package object test {
     object RunId extends Method[Unit, Nothing, LocalDateTime]
     object GlobalConnSemaphore extends Method[Unit, Nothing, Semaphore]
     object AppPath extends Method[Unit, Nothing, Path]
+    object DownloadTracks extends Method[Unit, Nothing, Boolean]
 
     val compose: URLayer[Has[mock.Proxy], Config] =
       ZLayer.fromServiceM { proxy =>
@@ -36,6 +37,7 @@ package object test {
             def runId: LocalDateTime = rts.unsafeRun(proxy(RunId))
             def globalConnSemaphore: Semaphore = rts.unsafeRun(proxy(GlobalConnSemaphore))
             def appPath: Path = rts.unsafeRun(proxy(AppPath))
+            def downloadTracks: Boolean = rts.unsafeRun(proxy(DownloadTracks))
           }
         }
       }

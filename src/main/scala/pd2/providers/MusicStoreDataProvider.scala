@@ -1,5 +1,6 @@
 package pd2.providers
 
+import pd2.config.Config
 import pd2.config.ConfigDescription.Feed
 import pd2.providers.Exceptions.{BadContentLength, InternalConfigurationError, ServiceUnavailable}
 import pd2.providers.filters.{FilterEnv, TrackFilter}
@@ -16,6 +17,7 @@ import pd2.ui.consoleprogress.ConsoleProgress
 import pd2.ui.consoleprogress.ConsoleProgress.ProgressItem
 import zio.logging._
 
+import java.time.temporal.ChronoUnit
 import java.time.{LocalDate, Period}
 
 trait MusicStoreDataProvider {
@@ -35,6 +37,17 @@ trait MusicStoreDataProvider {
     protected val trackRequest: RequestT[Empty, Either[String, Array[Byte]], Any] =
         providerBasicRequest.response(asByteArray)
 
+    /** Результат скачиывания трека. Успех, ошибка или пропуск.
+     *  Пропуски возвращаются, если пользователь явно указал, что не
+     *  хочет скачивать треки, указав соответствующий аргумент к. строки. */
+    sealed trait TrackDownloadResult
+    object TrackDownloadResult {
+        final case class Success(data : Array[Byte]) extends TrackDownloadResult
+        final case object Failure extends TrackDownloadResult
+        final case object Skipped extends TrackDownloadResult
+    }
+
+
     def processTracks[R , E <: Throwable](
       feed          : Feed,
       dateFrom      : LocalDate,
@@ -47,7 +60,7 @@ trait MusicStoreDataProvider {
         if (!feed.dependsOnDate || dateFrom.plusDays(1) == dateTo) {
             processSingleDate(feed, dateFrom, filter, processTrack)
         } else {
-            val dates = (0 until Period.between(dateFrom, dateTo).getDays).map(i => dateFrom.plusDays(i))
+            val dates = (0l until ChronoUnit.DAYS.between(dateFrom, dateTo)).map(i => dateFrom.plusDays(i))
             ZIO.foreachPar_(dates)(date => processSingleDate(feed, date, filter, processTrack))
         }
     }
@@ -142,5 +155,18 @@ trait MusicStoreDataProvider {
                                 .retry(schedule)
                                 .tapError(e => log.warn(s"Could not download $uri, error: $e"))
         } yield resp
+    }
+
+    protected def downloadTrack(trackUri: Uri, progressItem : ProgressItem)
+    : ZIO[Clock with Logging with Config, Throwable, TrackDownloadResult] = {
+        for {
+            downloadTrack   <- Config.downloadTracks
+            result          <- if (downloadTrack)
+                                    download(trackUri, progressItem)
+                                        .map(TrackDownloadResult.Success(_))
+                                        .orElseSucceed(TrackDownloadResult.Failure)
+                               else ZIO.succeed(TrackDownloadResult.Skipped)
+        } yield result
+
     }
 }

@@ -45,15 +45,18 @@ case class BeatportLive(
       tracksProgress          <- consoleProgress.acquireProgressItems(feed.name, filteredTracksWithDtos.length)
       _                       <- ZIO.foreachParN_(8)(filteredTracksWithDtos zip tracksProgress) { case ((t, dto), p) =>
                                 (for {
-                                  dataOpt <- downloadTrack(t.previewUrl, p)
-                                  _ <- dataOpt match {
-                                      case Some(bytes) =>
+                                  downloadResult <- downloadTrack(t.previewUrl, p)
+                                  _ <- downloadResult match {
+                                      case TrackDownloadResult.Success(bytes) =>
                                           processTrack(dto, bytes) *>
                                           filter.done(dto) *>
                                           consoleProgress.completeProgressItem(p)
-                                      case None =>
+                                      case TrackDownloadResult.Failure =>
                                           filter.done(dto) *>
                                           consoleProgress.failProgressItem(p)
+                                      case TrackDownloadResult.Skipped =>
+                                          filter.done(dto) *>
+                                          consoleProgress.completeProgressItem(p)
                                   }
                                 } yield ()).whenM(filter.checkBeforeProcessing(dto)
                                   .tap(b => ZIO.unless(b)(consoleProgress.completeProgressItem(p))))
@@ -71,13 +74,7 @@ case class BeatportLive(
     } yield page
   }
 
-  private def downloadTrack(trackUri: Uri, progressItem : ProgressItem)
-  : ZIO[Clock with Logging, Throwable, Option[Array[Byte]]] =
-  {
-    download(trackUri, progressItem)
-      .map(Some(_))
-      .orElseSucceed(None)
-  }
+
 }
 
 object BeatportLive {
