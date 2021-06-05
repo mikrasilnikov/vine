@@ -150,7 +150,9 @@ trait MusicStoreDataProvider {
             resp            <- globalSemaphore.withPermit(
                                     providerSemaphore.withPermit(
                                         log.trace(s"$uri") *>
-                                        send(req).tapError(_ => updateProgress)
+                                        send(req).tapError { e =>
+                                            log.warn(s"Retrying\n$uri\n(failed with ${e.toString})") *>
+                                            updateProgress }
                                 ))
                                 .retry(schedule)
                                 .tapError(e => log.warn(s"Could not download $uri, error: $e"))

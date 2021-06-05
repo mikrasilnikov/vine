@@ -55,14 +55,14 @@ case class TraxsourceLive(
                                     downloadResult <- downloadTrack(t.mp3Url, p)
                                     _ <- downloadResult match {
                                       case TrackDownloadResult.Success(bytes) =>
-                                        processTrack(dto, bytes) *>
+                                          processTrack(dto, bytes) *>
                                           filter.done(dto) *>
                                           consoleProgress.completeProgressItem(p)
                                       case TrackDownloadResult.Failure =>
-                                        filter.done(dto) *>
+                                          filter.done(dto) *>
                                           consoleProgress.failProgressItem(p)
                                       case TrackDownloadResult.Skipped =>
-                                        filter.done(dto) *>
+                                          filter.done(dto) *>
                                           consoleProgress.completeProgressItem(p)
                                     }
                                   } yield ()).whenM(filter.checkBeforeProcessing(dto)
