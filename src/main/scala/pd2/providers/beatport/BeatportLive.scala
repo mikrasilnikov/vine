@@ -58,8 +58,9 @@ case class BeatportLive(
                                           filter.done(dto) *>
                                           consoleProgress.completeProgressItem(p)
                                   }
-                                } yield ()).whenM(filter.checkBeforeProcessing(dto)
-                                  .tap(b => ZIO.unless(b)(consoleProgress.completeProgressItem(p))))
+                                } yield ()).whenM(
+                                        filter.checkBeforeProcessing(dto)
+                                          .tap(b => ZIO.unless(b)(consoleProgress.completeProgressItem(p))))
                               }
     } yield ()
   }

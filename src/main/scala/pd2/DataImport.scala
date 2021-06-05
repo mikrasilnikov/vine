@@ -3,6 +3,7 @@ package pd2
 import pd2.data.TrackParsing._
 import pd2.data._
 import pd2.data.TrackParsing
+import pd2.helpers.Conversions.OptionToZio
 import pd2.ui.ProgressBar.{InProgress, ProgressBarDimensions}
 import pd2.ui.ConsoleASCII
 import pd2.ui.consoleprogress.{ConsoleProgress, ConsoleProgressLive}
@@ -14,10 +15,14 @@ import zio.console.{Console, putStrLn}
 import zio.duration.durationInt
 import zio.nio.core.file._
 import zio.nio.file._
+import zio.stream.{Sink, ZStream}
+
 import java.io.IOException
 import java.nio.charset.StandardCharsets
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
+import scala.collection.immutable.HashSet
+import scala.collection.{immutable, mutable}
 
 object DataImport extends zio.App {
 
@@ -44,10 +49,12 @@ object DataImport extends zio.App {
 
   def run(args: List[String]) = {
 
+    pd2.Application.configureLogging()
+
     def customLayer(params : Params) =
       (Backend.makeLayer(SQLiteProfile, Backend.makeSqliteLiveConfig(params.outputPath)) >>>
         DatabaseService.makeLayer(SQLiteProfile)) ++
-      ConsoleProgressLive.makeLayer(ProgressBarDimensions(15, 60))
+      ConsoleProgressLive.makeLayer(ProgressBarDimensions(25, 60))
 
     val app = parseAndValidateParams(args)
       .foldM (
@@ -66,40 +73,54 @@ object DataImport extends zio.App {
       import db.profile.api._
 
       for {
-        _ <- putStrLn("Parsing source data into memory...")
-        tracks <- getUniqueTracks(params.sourcePath)
-        _ <- putStrLn(s"Got ${tracks.length} unique tracks")
         _ <- putStrLn(s"Creating schema...")
         _ <- db.run(db.tracks.schema.create)
-        _ <- putStrLn(s"Inserting rows to database...")
 
-        prgItems  <- ConsoleProgress.acquireProgressItems("Importing data", tracks.length / batchSize)
-        _         <- ConsoleProgress.drawProgress.repeat(Schedule.duration(333.millis)).forever.fork
-        _         <- ZIO.foreach_(tracks.grouped(batchSize).zip(prgItems).toList) {
-          case (batch, pItem) =>
-            ConsoleProgress.updateProgressItem(pItem, InProgress) *>
-              //TrackRepository.insertSeq(batch) *>
-              db.run(db.tracks ++= batch) *>
-              ConsoleProgress.completeProgressItem(pItem)
-        }
+        files <- Files.list(params.sourcePath)
+          .filter(path => path.filename.toString.endsWith(".txt"))
+          .runCollect
+
+        _ <- putStrLn(s"Dropping index ixUniqueName...")
+        _ <- db.run(sqlu""" DROP INDEX "ixUniqueName" """)
+
+        prgItems      <- ConsoleProgress.acquireProgressItems("Processing files", files.length)
+        progressFiber <- ConsoleProgress.drawProgress.repeat(Schedule.duration(333.millis)).forever.fork
+
+
+        hashRef   <- Ref.make[HashSet[String]](HashSet[String]())
+        _         <- ZIO.foreach_(files zip prgItems) { case (filePath, prgItem) =>
+                      uniqueTracksStream(filePath, hashRef).foreach { track =>
+                        db.run(db.tracks += track) *>
+                        ConsoleProgress.completeProgressItem(prgItem)
+                      }
+                    }
+        _         <- clock.sleep(500.millis) *> progressFiber.interrupt
+        _         <- putStrLn(s"Creating index ixUniqueName...")
+        _         <- db.run(sqlu""" CREATE UNIQUE INDEX "ixUniqueName" ON "tracks" ("UniqueName") """)
       } yield ()
     }
   }
 
-  private def getUniqueTracks(dataPath : Path): ZIO[Blocking, IOException, List[Track]] = {
-     for {
-      lines <- Files.list(dataPath)
-        .mapM(p => Files.readAllLines(p, StandardCharsets.UTF_8))
-        .runCollect
-        .map(chunk => chunk.toList.flatten)
-      parsed <- ZIO.foreachPar(lines)(line => ZIO.succeed(parseLine(line)))
-      unique = parsed
-        .groupBy(_.uniqueName)
-        .map { case (_, items) => items.minBy(t => t.artist.length + t.title.length) }
-    } yield unique.toList
+  /**
+   * Builds a stream of unique tracks from a text file (v1 database format).
+   * @param hashRef a reference to a hash set which is used for keeping track of duplicate unique names.
+   * */
+  private def uniqueTracksStream(
+    filePath : Path,
+    hashRef : Ref[immutable.HashSet[String]])
+  : ZStream[Blocking, Throwable, Track] =
+  {
+    ZStream.fromIterableM(Files.readAllLines(filePath, charset = StandardCharsets.UTF_8))
+      .mapM(line => parseLine(line).toZio.orElseFail(new Exception(s"Could not parse line $line")))
+      .filterM(track =>
+        hashRef.modify(map =>
+          if (map.contains(track.uniqueName)) (false, map)
+          else (true, map + track.uniqueName))
+      )
   }
 
-  private def parseLine(line : String) : Track = {
+  private def parseLine(line : String) : Option[Track] =
+  {
     val parts = line.split('\t')
 
     val artist = parts(0)
@@ -114,15 +135,10 @@ object DataImport extends zio.App {
 
     val feed = if (parts.length == 5) Some(parts(4)) else None
 
-    val rewritten = for {
-      artists <- TrackParsing.parseArtists(artist)
-      title <- TrackParsing.parseTitle(title)
-    } yield rewriteTrackName(artists, title)
-
-    if (rewritten.isDefined)
-      Track(artist, title, rewritten.get, label, releaseDate, feed, None)
-    else
-      Track(artist, title, s"$artist - $title", None, None, feed, None)
+    for {
+      parsedArtists <- TrackParsing.parseArtists(artist)
+      parsedTitle <- TrackParsing.parseTitle(title)
+      rewritten = rewriteTrackName(parsedArtists, parsedTitle)
+    } yield Track(artist, title, rewritten, label, releaseDate, feed, None)
   }
-
 }

@@ -141,7 +141,8 @@ object Application extends zio.App {
       _             <- dto.uniqueNameZio.flatMap(name => log.trace(s"Processing track $name"))
       previewsBase  <- Config.previewsBasePath
       feedPath      =  previewsBase / Path(dto.feed)
-      _             <- Files.createDirectory(feedPath).whenM(Files.notExists(feedPath))
+      _             <- Files.createDirectory(feedPath)
+                        .whenM(Files.notExists(feedPath))
       fileName      =  makeFileName(dto)
       _             <- Files.writeBytes(feedPath / Path(fixPath(fileName)), Chunk.fromArray(data))
       _             <- refDtos.update(dto :: _)

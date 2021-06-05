@@ -10,7 +10,6 @@ import net.ruippeixotog.scalascraper.scraper.ContentExtractors.{element, element
 import pd2.providers.{Pager, TrackDto}
 import pd2.providers.Exceptions.UnexpectedServiceResponse
 import sttp.model.Uri
-
 import java.time.{Duration, LocalDate}
 import scala.util.{Failure, Success, Try}
 
@@ -39,9 +38,6 @@ case class BeatportPageTrack(
     feed,
     id)
 }
-
-
-
 
 case class BeatportPage(pager : Option[Pager], tracks : List[BeatportPageTrack]) {
   val remainingPages: List[Int] = pager match {

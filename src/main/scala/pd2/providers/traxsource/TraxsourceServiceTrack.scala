@@ -38,7 +38,8 @@ object TraxsourceServiceTrack {
   final case class TraxsourceServiceArtist(id: Int, tag: Int, name: String, webName : String)
   final case class TraxsourceServiceLabel(id : Int, name : String, webName : String)
 
-  private[providers] def fromServiceResponse(response: String, feed : String) : Either[Throwable, List[TraxsourceServiceTrack]] =
+  private[providers] def fromServiceResponse(response: String, feed : String)
+  : Either[Throwable, List[TraxsourceServiceTrack]] =
   {
     val tryJson = for {
       xml <- Try { scala.xml.XML.loadString(response) }
@@ -46,7 +47,8 @@ object TraxsourceServiceTrack {
     } yield innerJson
 
     tryJson match {
-      case Failure(exception) => Left(UnexpectedServiceResponse("Malformed traxsource service response", response, Some(exception)))
+      case Failure(exception) =>
+        Left(UnexpectedServiceResponse("Malformed traxsource service response", response, Some(exception)))
       case Success(jsonString) =>
         // В ответе сервиса на Traxsource возвращается не просто json внутри xml, но сам json еще и не соответствует
         // спецификации. У него отстутсвуют кавычки у имен полей.
