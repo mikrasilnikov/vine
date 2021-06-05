@@ -60,7 +60,7 @@ trait MusicStoreDataProvider {
         if (!feed.dependsOnDate || dateFrom.plusDays(1) == dateTo) {
             processSingleDate(feed, dateFrom, filter, processTrack)
         } else {
-            val dates = (0l until ChronoUnit.DAYS.between(dateFrom, dateTo)).map(i => dateFrom.plusDays(i))
+            val dates = (0L until ChronoUnit.DAYS.between(dateFrom, dateTo)).map(i => dateFrom.plusDays(i))
             ZIO.foreachPar_(dates)(date => processSingleDate(feed, date, filter, processTrack))
         }
     }

@@ -40,7 +40,7 @@ case class BeatportLive(
       page                    <- getTracklistWebPage(feed, dateFrom, dateTo, pageProgressItem, pageNum)
                                   .tapError(e => pagePromiseOption.fold(ZIO.succeed())(promise => promise.fail(e).unit))
       _                       <- pagePromiseOption.fold(ZIO.succeed())(_.succeed(page.pager).unit)
-
+      _                       <- consoleProgress.completeProgressItem(pageProgressItem)
       filteredTracksWithDtos  <- ZIO.filter(page.tracks.map(st => (st, st.toTrackDto(feed.name)))) { case (_, dto) => filter.check(dto) }
       tracksProgress          <- consoleProgress.acquireProgressItems(feed.name, filteredTracksWithDtos.length)
       _                       <- ZIO.foreachParN_(8)(filteredTracksWithDtos zip tracksProgress) { case ((t, dto), p) =>
@@ -61,7 +61,6 @@ case class BeatportLive(
                                 } yield ()).whenM(filter.checkBeforeProcessing(dto)
                                   .tap(b => ZIO.unless(b)(consoleProgress.completeProgressItem(p))))
                               }
-      _                       <- consoleProgress.completeProgressItem(pageProgressItem)
     } yield ()
   }
 

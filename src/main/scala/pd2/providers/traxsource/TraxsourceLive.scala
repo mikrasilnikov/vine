@@ -45,11 +45,19 @@ case class TraxsourceLive(
       page                    <- getTracklistWebPage(feed, dateFrom, dateTo, pageProgressItem, pageNum)
                                   .tapError(e => pagePromiseOption.fold(ZIO.succeed())(promise => promise.fail(e).unit))
       _                       <- pagePromiseOption.fold(ZIO.succeed())(_.succeed(page.pager).unit)
-      serviceTracks           <- if (page.trackIds.nonEmpty) getServiceData(page.trackIds, feed.name, pageProgressItem)
+      _                       <- consoleProgress.completeProgressItem(pageProgressItem)
+
+      serviceTracks           <- if (page.trackIds.nonEmpty)
+                                    for {
+                                      serviceProgress <- consoleProgress.acquireProgressItem(feed.name)
+                                      data            <- getServiceData(page.trackIds, feed.name, serviceProgress)
+                                      _               <- consoleProgress.completeProgressItem(serviceProgress)
+                                    } yield data
                                  else ZIO.succeed(List())
 
       filteredTracksWithDtos  <- ZIO.filter(serviceTracks.map(st => (st, st.toTrackDto))) { case (_, dto) => filter.check(dto) }
       tracksProgress          <- consoleProgress.acquireProgressItems(feed.name, filteredTracksWithDtos.length)
+
       _                       <- ZIO.foreachParN_(8)(filteredTracksWithDtos zip tracksProgress) { case ((t, dto), p) =>
                                   (for {
                                     downloadResult <- downloadTrack(t.mp3Url, p)
@@ -68,7 +76,6 @@ case class TraxsourceLive(
                                   } yield ()).whenM(filter.checkBeforeProcessing(dto)
                                               .tap(b => ZIO.unless(b)(consoleProgress.completeProgressItem(p))))
                                 }
-      _                       <- consoleProgress.completeProgressItem(pageProgressItem)
     } yield ()
   }
 
