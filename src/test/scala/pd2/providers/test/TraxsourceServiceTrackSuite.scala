@@ -38,6 +38,15 @@ object TraxsourceServiceTrackSuite extends DefaultRunnableSpec with ManagedTestR
             .use { doc => ZIO.fromEither(TraxsourceServiceTrack.fromServiceResponse(doc, "03-traxsource-soulful-all"))
               .tapError(e => putStrLn(e.toString)) }
             .map(res => assert(res)(equalTo(List(expected))))
+        },
+
+        testM("Traxsource_ServiceResponse_WithRemixer.xml") {
+          loadTextFileManaged("/Traxsource_ServiceResponse_WithRemixer.xml.zip")
+            .use { doc =>
+              ZIO.fromEither(TraxsourceServiceTrack.fromServiceResponse(doc, "03-traxsource-soulful-all"))
+                .tapError(e => putStrLn(e.toString))
+            }
+            .map(res => assert(res.head.artist)(equalTo("Ronnie Herel, Gary Poole, Tasha LaRae")))
         }
       )
     )

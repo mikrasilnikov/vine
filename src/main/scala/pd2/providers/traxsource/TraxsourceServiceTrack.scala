@@ -27,15 +27,15 @@ final case class TraxsourceServiceTrack(
   mp3Url      : Uri,
   keySig      : String
 ) {
-  val artist = artists.mkString(", ")
-  val releaseName = titleUrl.split('/').last.replaceAll("-", " ")
+  val artist  : String      = artists.filter(_.order == 1).map(_.name).mkString(", ")
+  val releaseName : String  = titleUrl.split('/').last.replaceAll("-", " ")
   def toTrackDto : TrackDto =
     TrackDto(artists.map(_.name).mkString(", "), title, label.name, releaseName, releaseDate, duration, feed, trackId)
 }
 
 object TraxsourceServiceTrack {
 
-  final case class TraxsourceServiceArtist(id: Int, tag: Int, name: String, webName : String)
+  final case class TraxsourceServiceArtist(id: Int, order: Int, name: String, webName : String)
   final case class TraxsourceServiceLabel(id : Int, name : String, webName : String)
 
   private[providers] def fromServiceResponse(response: String, feed : String)
@@ -71,10 +71,10 @@ object TraxsourceServiceTrack {
     override def apply(c: HCursor): Decoder.Result[TraxsourceServiceArtist] =
       for {
         id <- c.downN(0).as[Int]
-        tag <- c.downN(1).as[Int]
+        order <- c.downN(1).as[Int]
         name <- c.downN(2).as[String]
         webName <- c.downN(3).as[String]
-      } yield TraxsourceServiceArtist(id, tag, name, webName)
+      } yield TraxsourceServiceArtist(id, order, name, webName)
   }
 
   implicit val traxsourceServiceLabelDecoder: Decoder[TraxsourceServiceLabel] = new Decoder[TraxsourceServiceLabel] {
