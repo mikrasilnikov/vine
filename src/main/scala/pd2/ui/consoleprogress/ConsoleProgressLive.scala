@@ -9,9 +9,8 @@ import pd2.ui.{ConsoleASCII, ProgressBar}
 import zio.system.System
 import zio.console.{Console, putStrLn}
 import zio.{Has, Ref, RefM, Task, ZIO, ZLayer}
-
 import java.io.IOException
-import java.time.LocalTime
+import java.time.LocalDateTime
 import scala.collection.mutable.ArrayBuffer
 
 final case class ConsoleProgressLive(
@@ -57,10 +56,9 @@ final case class ConsoleProgressLive(
   def drawProgress: ZIO[Any, IOException, Unit] = {
     import java.time.temporal.ChronoUnit
     for {
-
       state <- drawState.get
-      now   <- ZIO.effectTotal(LocalTime.now())
-      tick  =  state.startTime.until(now, ChronoUnit.MILLIS) / 333
+      now   <- ZIO.effectTotal(LocalDateTime.now())
+      tick  =  state.startTime.until(now, ChronoUnit.MILLIS) / 500
       _     <- console.putStr(ConsoleASCII.Positioning.up(state.lastNumBarsDrawn))
                 .when(state.lastNumBarsDrawn != 0)
       _     <- progressBarsRef.modify { bars =>
@@ -86,7 +84,7 @@ final case class ConsoleProgressLive(
 
 object ConsoleProgressLive {
 
-  case class DrawState(startTime : LocalTime, lastNumBarsDrawn : Int)
+  case class DrawState(startTime : LocalDateTime, lastNumBarsDrawn : Int)
 
   def makeLayer(progressBarDimensions: ProgressBarDimensions)
     : ZLayer[System with Console, Throwable, ConsoleProgress] =
@@ -106,14 +104,14 @@ object ConsoleProgressLive {
         insideIntellij  <- runningInsideIntellij(system)
         _               <- enableWindowsTerminalProcessing.when(win & !insideIntellij)
         bars            <- RefM.make(ArrayBuffer.empty[ProgressBar])
-        now             <- ZIO.effectTotal(LocalTime.now())
+        now             <- ZIO.effectTotal(LocalDateTime.now())
         drawState       <- Ref.make(DrawState(now, lastNumBarsDrawn = 0))
       } yield ConsoleProgressLive(console, bars, drawState, dimensions, insideIntellij)
   }
 
   private def enableWindowsTerminalProcessing : Task[Unit] =
     ZIO.effect {
-      import Kernel32.{INSTANCE => k32}
+      import Kernel32.{ INSTANCE => k32 }
       val currentModeRef = new IntByReference()
       val hConsole = k32.GetStdHandle(Wincon.STD_OUTPUT_HANDLE)
       if (k32.GetConsoleMode(hConsole, currentModeRef)) {
@@ -125,7 +123,7 @@ object ConsoleProgressLive {
         val errorCode = k32.GetLastError()
         val msgSize = k32.FormatMessage(
           WinBase.FORMAT_MESSAGE_FROM_SYSTEM |
-            WinBase.FORMAT_MESSAGE_ALLOCATE_BUFFER,
+          WinBase.FORMAT_MESSAGE_ALLOCATE_BUFFER,
           null,
           errorCode,
           0,

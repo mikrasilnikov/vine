@@ -1,7 +1,6 @@
 package pd2.ui
 
 import pd2.ui.ProgressBar._
-
 import scala.collection.mutable.ArrayBuffer
 
 final case class ProgressBar(workItems : ArrayBuffer[ItemState], layout: ProgressBarLayout)

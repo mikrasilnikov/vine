@@ -7,7 +7,6 @@ libraryDependencies ++= Seq(
   "com.typesafe.slick" %% "slick" % "3.3.3",
   "org.xerial" % "sqlite-jdbc" % "3.34.0",
   "dev.zio" %% "zio-logging-slf4j" % "0.5.10",
-  //"org.slf4j" % "slf4j-api" % "1.7.30",
   "ch.qos.logback" % "logback-classic" % "1.2.3",
   "org.typelevel" %% "cats-parse" % "0.3.2",
   "dev.zio" %% "zio" % "1.0.6",
@@ -30,3 +29,11 @@ libraryDependencies ++= Seq(
 scalacOptions += "-Ymacro-annotations"
 
 testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework")
+
+assembly / mainClass := Some("pd2.Application")
+assembly / assemblyJarName := "PreviewsDownloader2.jar"
+
+assembly / assemblyMergeStrategy := {
+  case PathList("META-INF", "MANIFEST.MF") => MergeStrategy.discard
+  case _ => MergeStrategy.first
+}

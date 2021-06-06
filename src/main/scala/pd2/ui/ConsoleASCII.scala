@@ -54,4 +54,9 @@ object ConsoleASCII {
     def right(n: Int) = s"\u001b[${n}C"
     def left(n: Int) = s"\u001b[${n}D"
   }
+
+  object CursorVisibility {
+    val hide = s"\u001b[?25l"
+    val show = s"\u001b[?25h"
+  }
 }

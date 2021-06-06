@@ -2,7 +2,6 @@ package pd2
 import ch.qos.logback.classic.LoggerContext
 import ch.qos.logback.classic.joran.JoranConfigurator
 import org.slf4j.LoggerFactory
-import pd2.LogReceiver.getClass
 import pd2.config.Config
 import pd2.config.ConfigDescription.{Feed, FeedTag, FilterTag}
 import pd2.data.{Backend, DatabaseService}
@@ -34,21 +33,16 @@ object Application extends zio.App {
 
     configureLogging()
 
-    val explicitPeriodOption = for {
-      dateFrom  <- getParamOption(args, "--dateFrom", LocalDate.parse)
-      dateTo    <- getParamOption(args, "--dateTo", LocalDate.parse)
-    } yield (dateFrom, dateTo)
-
-    val singleDayPeriodOption = for {
-      date <- getParamOption(args, "--date", LocalDate.parse)
-    } yield (date, date.plusDays(1))
+    val periodOption = for {
+      (from, to) <- getParam(args, "--date", parsePeriod, default = None)
+    } yield (from, to)
 
     val environmentOption = for {
-      (from, to)  <- explicitPeriodOption.orElse(singleDayPeriodOption)
-      configPath  <- getParamOption(args, "--config", Path.apply(_)).orElse(Some(Path("config.json")))
-      dbPath      <- getParamOption(args, "--database", Path.apply(_)).orElse(Some(Path("data.db")))
-      maxConn     <- getParamOption(args, "--maxConnections", _.toInt).orElse(Some(16))
-      download    <- getParamOption(args, "--downloadTracks", _.toBoolean).orElse(Some(true))
+      (from, to)  <- periodOption
+      configPath  <- getParam(args, "--config",         Path(_),     default = Some(Path("config.json")))
+      dbPath      <- getParam(args, "--database",       Path(_),     default = Some(Path("data.db")))
+      maxConn     <- getParam(args, "--maxConnections", _.toInt,     default = Some(16))
+      download    <- getParam(args, "--downloadTracks", _.toBoolean, default = Some(true))
     } yield makeEnvironment(
       maxConnections = maxConn,
       barDimensions = ProgressBarDimensions(27, 65),
@@ -102,19 +96,42 @@ object Application extends zio.App {
 
   def printUsage : ZIO[Console, Throwable, Unit] = for {
     _ <- putStrLn("Examples:")
-    _ <- putStrLn("java -cp PreviewsDownloader2.jar pd2.Application --date=2021-05-01")
-    _ <- putStrLn("java -cp PreviewsDownloader2.jar pd2.Application --dateFrom=2021-05-01 --dateTo=2021-05-07")
-    _ <- putStrLn("java -cp PreviewsDownloader2.jar pd2.Application --dateFrom=2021-05-01 --dateTo=2021-05-07 --config=config.json")
-    _ <- putStrLn("java -cp PreviewsDownloader2.jar pd2.Application --dateFrom=2021-05-01 --dateTo=2021-05-07 --config=config.json --database=data.db --maxConnections=16")
+    _ <- putStrLn("java -jar PreviewsDownloader2.jar --date=2021-05-01")
+    _ <- putStrLn("java -jar PreviewsDownloader2.jar --date=2021-05-01,2021-05-02")
+    _ <- putStrLn("java -jar PreviewsDownloader2.jar --date=2021-05-01,2021-05-02 --config=config.json")
+    _ <- putStrLn("java -jar PreviewsDownloader2.jar --date=2021-05-01,2021-05-02 --config=config.json --database=data.db --maxConnections=16")
   } yield ()
 
-  def getParamOption[P](args : List[String], name : String, unsafeParse : String => P) : Option[P] =
-    for {
+  /** "2021-06-01,2021-06-02" */
+  def parsePeriod(str : String) : (LocalDate, LocalDate) = {
+    val splitted = str.split(',')
+    if (splitted.length == 1)
+      (LocalDate.parse(splitted(0)), LocalDate.parse(splitted(0)).plusDays(1))
+    else
+      (LocalDate.parse(splitted(0)), LocalDate.parse(splitted(1)))
+  }
+
+  /**
+   * Parses command line argument
+   * @param unsafeParse Unsafe conversion from string to target type. May throw exceptions.
+   * @param default     Default value to return on parse error or absence of argument. Use None for required params.
+   */
+  def getParam[P](
+    args : List[String],
+    name : String,
+    unsafeParse : String => P,
+    default : Option[P])
+  : Option[P] =
+  {
+    val parseResult = for {
       arg <- args.find(_.startsWith(s"$name="))
       parameterStr <- arg.split('=').lastOption
       tryParsed = Try { unsafeParse(parameterStr) }
       res <- tryParsed.fold[Option[P]](_ => None, Some(_))
     } yield res
+
+    parseResult.orElse(default)
+  }
 
   def processFeed(feed : Feed, refDtos : Ref[List[TrackDto]])
   : ZIO[
