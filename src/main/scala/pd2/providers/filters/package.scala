@@ -172,7 +172,7 @@ package object filters {
   val ignoredLabels : TrackFilter = new TrackFilter {
     def check(dto: TrackDto): ZIO[FilterEnv, Throwable, Boolean] = for {
       shitLabels <- Config.shitLabels
-    } yield shitLabels.map(_.toLowerCase).contains(dto.label.toLowerCase)
+    } yield !shitLabels.map(_.toLowerCase).contains(dto.label.toLowerCase)
 
     def checkBeforeProcessing(dto: TrackDto): ZIO[FilterEnv, Throwable, Boolean] = check(dto)
     def done(dto: TrackDto): ZIO[FilterEnv, Throwable, Unit] = ZIO.succeed()

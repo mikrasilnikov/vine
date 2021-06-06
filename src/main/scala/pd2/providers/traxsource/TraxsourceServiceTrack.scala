@@ -27,6 +27,7 @@ final case class TraxsourceServiceTrack(
   mp3Url      : Uri,
   keySig      : String
 ) {
+  // If artist.order > 1 then it's a remixer.
   val artist  : String      = artists.filter(_.order == 1).map(_.name).mkString(", ")
   val releaseName : String  = titleUrl.split('/').last.replaceAll("-", " ")
   def toTrackDto : TrackDto =
