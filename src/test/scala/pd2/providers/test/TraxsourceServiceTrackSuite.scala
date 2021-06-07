@@ -47,7 +47,18 @@ object TraxsourceServiceTrackSuite extends DefaultRunnableSpec with ManagedTestR
                 .tapError(e => putStrLn(e.toString))
             }
             .map(res => assert(res.head.artist)(equalTo("Ronnie Herel, Gary Poole, Tasha LaRae")))
+        },
+
+        testM("Traxsource_ServiceResponse_DoubleQuotes.xml") {
+          loadTextFileManaged("/Traxsource_ServiceResponse_DoubleQuotes.xml.zip")
+            .use { doc =>
+              ZIO.fromEither(TraxsourceServiceTrack.fromServiceResponse(doc, "03-traxsource-house-all"))
+                .tapError(e => putStrLn(e.toString))
+            }
+            .map(res => assert(res.head.catNumber)(equalTo("884385733490")))
         }
+
+
       )
     )
 }
