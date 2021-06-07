@@ -1,4 +1,5 @@
 package pd2
+
 import zio.blocking.Blocking
 import zio.{Has, Semaphore, Task, ZIO, ZLayer}
 import zio.macros.accessible
@@ -8,7 +9,6 @@ import io.circe.parser._
 import pd2.config.ConfigDescription.{Feed, FeedTag, FilterTag}
 import pd2.helpers.Conversions.EitherToZio
 import zio.console.{Console, putStr, putStrLn}
-
 import java.io.File
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files => JFiles, Path => JPath}
@@ -31,6 +31,11 @@ package object config {
       def myLabels            : List[String]
       def shitLabels          : List[String]
       def previewsBasePath    : Path
+      /** LocalDateTime at the moment of application start with nanoseconds field set to zero.
+       *  This value is used to identify tracks that were queued for downloading
+       *  during previous runs (failed downloads). When a track is queued for download
+       *  on a paticular fiber it's "Queued" column value is updated with current runId.
+       *  */
       def runId               : LocalDateTime
       def globalConnSemaphore : Semaphore
       def appPath             : Path
@@ -71,7 +76,7 @@ package object config {
         shit        <-  ZIO.foldLeft(description.noShit.dataFiles)(List[String]())(
                           (list, fName) => Files.readAllLines(jarPath / Path(fName)).map(list ++ _))
         _           <- putStrLn(s"Loaded ${shit.length} ignored labels.")
-        localDt     <- ZIO.succeed(LocalDateTime.now())
+        localDt     <- ZIO.succeed(LocalDateTime.now().withNano(0))
         _           <- ensureCorrectDateRangeIsUsedWithTraxsourceFeeds(description.feeds, from, localDt.toLocalDate)
         gSemaphore  <- Semaphore.make(globalConnectionsLimit)
         targetFolder= description.previewsFolder.replace("{0}",
@@ -98,8 +103,7 @@ package object config {
     def buildArtistRegex(name : String) : Regex =
       ("(\\W|^)" + Regex.quote(name.trim.toLowerCase) + "(\\W|$)").r
 
-    /** Traxsource "Just Added" and "DJ Top 10s" sections do not work on dates earlier then 180 days prior today.
-     *  Support answered that it is so by design. */
+    /** Traxsource "Just Added" and "DJ Top 10s" sections do not work on dates earlier then 180 days prior to today. */
     def ensureCorrectDateRangeIsUsedWithTraxsourceFeeds(
       feeds : List[Feed], dateFrom : LocalDate, currentDate : LocalDate)
     : Task[Unit] =
@@ -112,8 +116,8 @@ package object config {
                            feed.urlTemplate.startsWith("/dj-top-10s")))
         earliest  =  currentDate.minusDays(179)
         _ <- ZIO.fail(new Exception(
-          """Traxsource "Just Added" and "DJ Top 10s" sections do not work on dates earlier then 180 days prior today.
-            |Please use more recent dates or remove feeds with urls starting with /just-added or /dj-top-10s
+          """Traxsource "Just Added" and "DJ Top 10s" sections do not work on dates earlier then 180 days prior to today.
+            |Please use more recent date range or remove feeds with urls starting with /just-added or /dj-top-10s
             |Problematic feeds: """.stripMargin ++ problematic.map(_.name).mkString(", ")
         )).when(problematic.nonEmpty && dateFrom.compareTo(earliest) < 0)
       } yield ()

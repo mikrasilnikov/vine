@@ -162,7 +162,8 @@ package object filters {
                   .as(false)
             case InProcess => ZIO.succeed(false)
             case Failed(on) =>
-              log.info(s"Restarting failed download: ${dto.artist} - ${dto.title}. Failed on $on")
+              log.info(
+                s"Restarting failed download: ${dto.artist} - ${dto.title}. Failed on $on (current:$runId)")
                 .as(true)
           }
 
