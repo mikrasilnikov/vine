@@ -8,7 +8,6 @@ import pd2.ui.ProgressBar
 import zio.system.System
 import zio.console.{Console, putStrLn}
 import zio.{Has, Ref, RefM, Task, ZIO, ZLayer}
-
 import java.io.IOException
 import java.time.LocalDateTime
 import scala.collection.mutable.ArrayBuffer
@@ -64,11 +63,13 @@ final case class ConsoleProgressLive(
       // Hide cursor
       _ <- console.putStr("\u001b[?25l")
 
-      // Save current cursor position before drawing first frame.
-      // Restore initial position before drawing subsequent frames.
       op    <- drawState.modify { state =>
-                  if (state.firstFrame) (console.putStr(ansi().saveCursorPosition().toString), state.copy(firstFrame = false))
-                  else (console.putStr(ansi().restoreCursorPosition().toString), state)
+                if (state.firstFrame)
+                  (console.putStr(ansi().eraseScreen().cursor(0,0).toString),
+                   state.copy(firstFrame = false))
+                else
+                  (console.putStr(ansi().cursor(0,0).toString),
+                   state)
                }
       _     <- op
 
@@ -77,6 +78,7 @@ final case class ConsoleProgressLive(
                   _ <- ZIO.foreach_(bars)(bar => drawProgressBar(bar, tick))
                 } yield ((), bars)
               }
+
       // Show cursor
       _ <- console.putStr("\u001b[?25h")
     } yield ()
@@ -86,11 +88,12 @@ final case class ConsoleProgressLive(
   {
     for {
       render  <- ZIO.succeed(ProgressBar.render(bar, tick))
-      _       <-  if (!runningInsideIntellij)
+      _       <-  if (!runningInsideIntellij) {
+                  console.putStr(ansi().eraseLine().toString) *>
                   console.putStr(render) *>
                   console.putStr(ansi().cursorDown(1).toString) *>
                   console.putStr(ansi().cursorToColumn(1).toString)
-      else
+      } else
         console.putStr("\b" * 100) *>
         console.putStr(render)
     } yield ()

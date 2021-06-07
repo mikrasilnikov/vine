@@ -6,6 +6,7 @@ import zio.{Has, Semaphore, URLayer, ZLayer}
 import zio.test.mock.{Mock, mockable}
 
 import java.time.{LocalDate, LocalDateTime}
+import scala.util.matching.Regex
 
 package object test {
 
@@ -14,7 +15,7 @@ package object test {
     object ConfigDescription extends Method[Unit, Nothing, ConfigDescription]
     object DateFrom extends Method[Unit, Nothing, LocalDate]
     object DateTo extends Method[Unit, Nothing, LocalDate]
-    object MyArtists extends Method[Unit, Nothing, List[String]]
+    object MyArtistsRegexes extends Method[Unit, Nothing, List[Regex]]
     object MyLabels extends Method[Unit, Nothing, List[String]]
     object ShitLabels extends Method[Unit, Nothing, List[String]]
     object PreviewsBaseBath extends Method[Unit, Nothing, Path]
@@ -30,7 +31,7 @@ package object test {
             def configDescription: ConfigDescription = rts.unsafeRun(proxy(ConfigDescription))
             def dateFrom : LocalDate = rts.unsafeRun(proxy(DateFrom))
             def dateTo : LocalDate = rts.unsafeRun(proxy(DateTo))
-            def myArtists: List[String] = rts.unsafeRun(proxy(MyArtists))
+            def myArtistsRegexes: List[Regex] = rts.unsafeRun(proxy(MyArtistsRegexes))
             def myLabels: List[String] = rts.unsafeRun(proxy(MyLabels))
             def shitLabels: List[String] = rts.unsafeRun(proxy(ShitLabels))
             def previewsBasePath: Path = rts.unsafeRun(proxy(PreviewsBaseBath))

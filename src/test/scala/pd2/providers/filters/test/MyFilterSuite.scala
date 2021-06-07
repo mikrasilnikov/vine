@@ -1,5 +1,6 @@
 package pd2.providers.filters.test
 
+import pd2.config.Config
 import pd2.config.test.ConfigMock
 import pd2.data.DatabaseService
 import pd2.data.test.{TestBackend, TestDatabaseService}
@@ -20,9 +21,54 @@ object MyFilterSuite extends DefaultRunnableSpec {
     suite("MyFilterSuite")(
 
       testM("Filtering by artist1") {
-
         val configMock =
-          ConfigMock.MyArtists(value(List("Jay J"))) ++
+          ConfigMock.MyArtistsRegexes(value(List(Config.buildArtistRegex("Jay J")))) ++
+          ConfigMock.MyLabels(value(List("Defected")))
+
+        val trackDto = TrackDto(
+          "Jay J, Artist2",
+          "123",
+          "123",
+          "123",
+          LocalDate.parse("2003-05-26"),
+          Duration.ofMinutes(5),
+          "03-traxsource-house-featured",
+          12345)
+
+        val test = for {
+          actual    <- pd2.providers.filters.my.check(trackDto)
+        } yield assert(actual)(isTrue)
+
+        test.provideCustomLayer(
+          TestBackend.makeLayer >>> TestDatabaseService.makeLayer ++ configMock ++ Slf4jLogger.make((_, s) => s))
+      },
+
+      testM("Filtering by artist1 - ignoring case") {
+        val configMock =
+          ConfigMock.MyArtistsRegexes(value(List(Config.buildArtistRegex("JAY j")))) ++
+            ConfigMock.MyLabels(value(List("Defected")))
+
+        val trackDto = TrackDto(
+          "Jay J, Artist2",
+          "123",
+          "123",
+          "123",
+          LocalDate.parse("2003-05-26"),
+          Duration.ofMinutes(5),
+          "03-traxsource-house-featured",
+          12345)
+
+        val test = for {
+          actual    <- pd2.providers.filters.my.check(trackDto)
+        } yield assert(actual)(isTrue)
+
+        test.provideCustomLayer(
+          TestBackend.makeLayer >>> TestDatabaseService.makeLayer ++ configMock ++ Slf4jLogger.make((_, s) => s))
+      },
+
+      testM("Filtering by artist1 - trim") {
+        val configMock =
+          ConfigMock.MyArtistsRegexes(value(List(Config.buildArtistRegex(" Jay J\t")))) ++
           ConfigMock.MyLabels(value(List("Defected")))
 
         val trackDto = TrackDto(
@@ -44,10 +90,9 @@ object MyFilterSuite extends DefaultRunnableSpec {
       },
 
       testM("Filtering by artist2") {
-
         val configMock =
-          ConfigMock.MyArtists(value(List("Jay J"))) ++
-            ConfigMock.MyLabels(value(List("Defected")))
+          ConfigMock.MyArtistsRegexes(value(List(Config.buildArtistRegex("Jay J")))) ++
+          ConfigMock.MyLabels(value(List("Defected")))
 
         val trackDto = TrackDto(
           "Jay J & Artist2",
@@ -70,8 +115,8 @@ object MyFilterSuite extends DefaultRunnableSpec {
       testM("Filtering by artist3") {
 
         val configMock =
-          ConfigMock.MyArtists(value(List("Jay J"))) ++
-            ConfigMock.MyLabels(value(List("Defected")))
+          ConfigMock.MyArtistsRegexes(value(List(Config.buildArtistRegex("Jay J")))) ++
+          ConfigMock.MyLabels(value(List("Defected")))
 
         val trackDto = TrackDto(
           "Artist2 feat. Jay J",
@@ -94,8 +139,8 @@ object MyFilterSuite extends DefaultRunnableSpec {
       testM("Filtering by title") {
 
         val configMock =
-          ConfigMock.MyArtists(value(List("Jay J"))) ++
-            ConfigMock.MyLabels(value(List("Defected")))
+          ConfigMock.MyArtistsRegexes(value(List(Config.buildArtistRegex("Jay J")))) ++
+          ConfigMock.MyLabels(value(List("Defected")))
 
         val trackDto = TrackDto(
           "123",
@@ -118,7 +163,7 @@ object MyFilterSuite extends DefaultRunnableSpec {
       testM("Whole word by artist") {
 
         val configMock =
-          ConfigMock.MyArtists(value(List("Jay J"))) ++
+          ConfigMock.MyArtistsRegexes(value(List(Config.buildArtistRegex("Jay J")))) ++
           ConfigMock.MyLabels(value(List("Defected")))
 
         val trackDto = TrackDto(
@@ -142,8 +187,8 @@ object MyFilterSuite extends DefaultRunnableSpec {
       testM("Whole word by title") {
 
         val configMock =
-          ConfigMock.MyArtists(value(List("Jay J"))) ++
-            ConfigMock.MyLabels(value(List("Defected")))
+          ConfigMock.MyArtistsRegexes(value(List(Config.buildArtistRegex("Jay J")))) ++
+          ConfigMock.MyLabels(value(List("Defected")))
 
         val trackDto = TrackDto(
           "123",

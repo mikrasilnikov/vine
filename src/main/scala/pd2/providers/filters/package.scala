@@ -64,18 +64,17 @@ package object filters {
   val my : TrackFilter = new TrackFilter {
     def check(dto: TrackDto): ZIO[Config, Throwable, Boolean] = {
       for {
-        artists         <- Config.myArtists
+        artistsRegexes  <- Config.myArtistsRegexes
         labels          <- Config.myLabels
         dtoArtistLower  = dto.artist.toLowerCase
         dtoTitleLower   = dto.title.toLowerCase
 
-        myArtist = artists.exists { a =>
-          val regex = ("(\\W|^)" + Regex.quote(a.toLowerCase) + "(\\W|$)").r
+        myArtist = artistsRegexes.exists { regex =>
           regex.findFirstIn(dtoArtistLower).isDefined ||
           regex.findFirstIn(dtoTitleLower).isDefined
         }
 
-        myLabel = labels.exists(l => l.toLowerCase == dto.label.toLowerCase)
+        myLabel = labels.contains(dto.label.toLowerCase)
       } yield myArtist || myLabel
     }
     def checkBeforeProcessing(dto: TrackDto): ZIO[FilterEnv, Throwable, Boolean] = check(dto)
@@ -155,9 +154,12 @@ package object filters {
 
           result <- checkResult match {
             case IsNew => ZIO.succeed(true)
-            case Downloaded(a, t) =>
-              log.info(s"Track deduplicated. \n\t${dto.artist} - ${dto.title} \n\t$a - $t")
-                .as(false)
+            case Downloaded(artist, title)  =>
+              // Logging deduplication events only when artist or title are different.
+              val needsLogging = artist != dto.artist || title != dto.title
+                log.info(s"Track deduplicated.\n\tNew: ${dto.artist} - ${dto.title}\n\tOld: $artist - $title")
+                  .when(needsLogging)
+                  .as(false)
             case InProcess => ZIO.succeed(false)
             case Failed(on) =>
               log.info(s"Restarting failed download: ${dto.artist} - ${dto.title}. Failed on $on")
