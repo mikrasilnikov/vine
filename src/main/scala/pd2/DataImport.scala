@@ -5,7 +5,6 @@ import pd2.data._
 import pd2.data.TrackParsing
 import pd2.helpers.Conversions.OptionToZio
 import pd2.ui.ProgressBar.{InProgress, ProgressBarDimensions}
-import pd2.ui.ConsoleASCII
 import pd2.ui.consoleprogress.{ConsoleProgress, ConsoleProgressLive}
 import slick.jdbc.SQLiteProfile
 import zio._
@@ -16,7 +15,6 @@ import zio.duration.durationInt
 import zio.nio.core.file._
 import zio.nio.file._
 import zio.stream.{Sink, ZStream}
-
 import java.io.IOException
 import java.nio.charset.StandardCharsets
 import java.time.LocalDate
@@ -51,14 +49,23 @@ object DataImport extends zio.App {
 
     pd2.Application.configureLogging()
 
-    def customLayer(params : Params) =
-      (Backend.makeLayer(SQLiteProfile, Backend.makeSqliteLiveConfig(params.outputPath)) >>>
-        DatabaseService.makeLayer(SQLiteProfile)) ++
-      ConsoleProgressLive.makeLayer(ProgressBarDimensions(25, 60))
+    def customLayer(params : Params) = {
+
+      val databaseService =
+        Backend.makeLayer(SQLiteProfile, Backend.makeSqliteLiveConfig(params.outputPath)) >>>
+        DatabaseService.makeLayer(SQLiteProfile)
+
+      val consoleProgress =
+        (system.System.live ++ Console.live) >>>
+          ConsoleProgressLive.makeLayer(ProgressBarDimensions(25, 60))
+
+      databaseService ++ consoleProgress
+
+    }
 
     val app = parseAndValidateParams(args)
       .foldM (
-        e => putStrLn(ConsoleASCII.Color.red + e.getMessage + ConsoleASCII.Color.white) *> putStrLn("") *> printUsage,
+        e => printUsage,
         params => performImport(params).provideCustomLayer(customLayer(params)))
 
     app.exitCode

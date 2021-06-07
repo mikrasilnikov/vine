@@ -1,14 +1,14 @@
 package pd2.ui.consoleprogress
 
-import com.sun.jna.platform.win32.{Kernel32, WinBase, Wincon}
-import com.sun.jna.ptr.{IntByReference, PointerByReference}
+import org.fusesource.jansi.Ansi.ansi
 import pd2.ui.ProgressBar.{ItemState, Pending, ProgressBarDimensions, ProgressBarLayout}
 import pd2.ui.consoleprogress.ConsoleProgress.ProgressItem
 import pd2.ui.consoleprogress.ConsoleProgressLive.DrawState
-import pd2.ui.{ConsoleASCII, ProgressBar}
+import pd2.ui.ProgressBar
 import zio.system.System
 import zio.console.{Console, putStrLn}
 import zio.{Has, Ref, RefM, Task, ZIO, ZLayer}
+
 import java.io.IOException
 import java.time.LocalDateTime
 import scala.collection.mutable.ArrayBuffer
@@ -53,38 +53,53 @@ final case class ConsoleProgressLive(
     : ZIO[Any, Nothing, ProgressItem] =
     acquireProgressItems(batchName, 1).map(_.head)
 
-  def drawProgress: ZIO[Any, IOException, Unit] = {
+  def drawProgress: ZIO[Any, IOException, Unit] =
+  {
     import java.time.temporal.ChronoUnit
     for {
       state <- drawState.get
       now   <- ZIO.effectTotal(LocalDateTime.now())
       tick  =  state.startTime.until(now, ChronoUnit.MILLIS) / 500
-      _     <- console.putStr(ConsoleASCII.Positioning.up(state.lastNumBarsDrawn))
-                .when(state.lastNumBarsDrawn != 0)
+
+      // Hide cursor
+      _ <- console.putStr("\u001b[?25l")
+
+      // Save current cursor position before drawing first frame.
+      // Restore initial position before drawing subsequent frames.
+      op    <- drawState.modify { state =>
+                  if (state.firstFrame) (console.putStr(ansi().saveCursorPosition().toString), state.copy(firstFrame = false))
+                  else (console.putStr(ansi().restoreCursorPosition().toString), state)
+               }
+      _     <- op
+
       _     <- progressBarsRef.modify { bars =>
                 for {
                   _ <- ZIO.foreach_(bars)(bar => drawProgressBar(bar, tick))
-                  _ <- drawState.modify(s => ((), s.copy(lastNumBarsDrawn = bars.length)))
                 } yield ((), bars)
               }
+      // Show cursor
+      _ <- console.putStr("\u001b[?25h")
     } yield ()
   }
 
-  private def drawProgressBar(bar: ProgressBar, tick : Long): ZIO[Any, IOException, Unit] = {
+  private def drawProgressBar(bar: ProgressBar, tick : Long): ZIO[Any, IOException, Unit] =
+  {
     for {
-      _ <- ZIO.succeed()
-      render = ProgressBar.render(bar, tick)
-      _ <-  if (!runningInsideIntellij)
-        console.putStr(ConsoleASCII.Positioning.left(1000)) *> console.putStrLn(render)
+      render  <- ZIO.succeed(ProgressBar.render(bar, tick))
+      _       <-  if (!runningInsideIntellij)
+                  console.putStr(render) *>
+                  console.putStr(ansi().cursorDown(1).toString) *>
+                  console.putStr(ansi().cursorToColumn(1).toString)
       else
-        console.putStr("\b" * 100) *> console.putStr(render)
+        console.putStr("\b" * 100) *>
+        console.putStr(render)
     } yield ()
   }
 }
 
 object ConsoleProgressLive {
 
-  case class DrawState(startTime : LocalDateTime, lastNumBarsDrawn : Int)
+  case class DrawState(startTime : LocalDateTime, firstFrame : Boolean)
 
   def makeLayer(progressBarDimensions: ProgressBarDimensions)
     : ZLayer[System with Console, Throwable, ConsoleProgress] =
@@ -93,50 +108,20 @@ object ConsoleProgressLive {
   }
 
   def makeCore(
-    system    : System.Service,
-    console   : Console.Service,
-    dimensions: ProgressBarDimensions)
+    system      : System.Service,
+    console     : Console.Service,
+    dimensions  : ProgressBarDimensions)
   : ZIO[Any, Throwable, ConsoleProgressLive] =
    {
       for {
         osOption        <- system.property("os.name")
         win             =  osOption.map(_.toLowerCase.contains("windows")).fold(false)(identity)
         insideIntellij  <- runningInsideIntellij(system)
-        _               <- enableWindowsTerminalProcessing.when(win & !insideIntellij)
         bars            <- RefM.make(ArrayBuffer.empty[ProgressBar])
         now             <- ZIO.effectTotal(LocalDateTime.now())
-        drawState       <- Ref.make(DrawState(now, lastNumBarsDrawn = 0))
+        drawState       <- Ref.make(DrawState(startTime = now, firstFrame = true))
       } yield ConsoleProgressLive(console, bars, drawState, dimensions, insideIntellij)
   }
-
-  private def enableWindowsTerminalProcessing : Task[Unit] =
-    ZIO.effect {
-      import Kernel32.{ INSTANCE => k32 }
-      val currentModeRef = new IntByReference()
-      val hConsole = k32.GetStdHandle(Wincon.STD_OUTPUT_HANDLE)
-      if (k32.GetConsoleMode(hConsole, currentModeRef)) {
-        k32.SetConsoleMode(hConsole, currentModeRef.getValue | Wincon.ENABLE_VIRTUAL_TERMINAL_PROCESSING)
-        ()
-      } else {
-        val buffer = new PointerByReference()
-
-        val errorCode = k32.GetLastError()
-        val msgSize = k32.FormatMessage(
-          WinBase.FORMAT_MESSAGE_FROM_SYSTEM |
-          WinBase.FORMAT_MESSAGE_ALLOCATE_BUFFER,
-          null,
-          errorCode,
-          0,
-          buffer,
-          0,
-          null)
-
-        val message = String.valueOf(
-          buffer.getPointer.getPointer(0).getCharArray(0, 24))
-
-        throw new Exception(message)
-      }
-    }
 
   private def runningInsideIntellij(systemService : System.Service)
   : ZIO[Any, SecurityException, Boolean] = {

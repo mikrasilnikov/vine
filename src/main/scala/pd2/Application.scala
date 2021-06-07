@@ -12,7 +12,7 @@ import pd2.ui.ProgressBar.ProgressBarDimensions
 import pd2.ui.consoleprogress.{ConsoleProgress, ConsoleProgressLive}
 import slick.jdbc.SQLiteProfile
 import zio.blocking.Blocking
-import zio.console.{Console, putStrLn}
+import zio.console.{Console, putStr, putStrLn}
 import zio.duration.durationInt
 import zio.nio.core.file.Path
 import zio.nio.file.Files
@@ -22,14 +22,16 @@ import zio.clock.Clock
 import zio.{Chunk, ExitCode, Has, Ref, Schedule, URIO, ZIO, ZLayer, clock}
 import zio.logging._
 import zio.logging.slf4j.Slf4jLogger
-
 import java.time.format.DateTimeFormatter
 import java.time.{LocalDate, LocalDateTime}
 import scala.util.Try
+import org.fusesource.jansi.AnsiConsole
 
 object Application extends zio.App {
 
   def run(args: List[String]): URIO[zio.ZEnv, ExitCode] = {
+
+    AnsiConsole.systemInstall()
 
     configureLogging()
 
@@ -75,6 +77,7 @@ object Application extends zio.App {
 
       _             <- clock.sleep(500.millis) *> progressFiber.interrupt
       processed     <- processedRef.get
+
       _             <- putStrLn(s"\ntotal tracks: ${processed.length}")
     } yield ()
 
@@ -189,7 +192,8 @@ object Application extends zio.App {
     import sttp.client3.httpclient.zio.HttpClientZioBackend
 
     val configLayer = Config.makeLayer(configFilePath, dateFrom, dateTo, maxConnections, downloadTracks)
-    val consoleProgress = (System.live ++ Console.live) >>> ConsoleProgressLive.makeLayer(barDimensions)
+    val consoleProgress = (System.live ++ Console.live) >>>
+      ConsoleProgressLive.makeLayer(barDimensions)
 
     val traxsourceLive = configLayer ++
       (consoleProgress ++ HttpClientZioBackend.layer()) >>> TraxsourceLive.makeLayer(8)
