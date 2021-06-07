@@ -56,6 +56,15 @@ object TraxsourceServiceTrackSuite extends DefaultRunnableSpec with ManagedTestR
                 .tapError(e => putStrLn(e.toString))
             }
             .map(res => assert(res.head.catNumber)(equalTo("884385733490")))
+        },
+
+        testM("Traxsource_ServiceResponse_Tabs.xml") {
+          loadTextFileManaged("/Traxsource_ServiceResponse_Tabs.xml.zip")
+            .use { doc =>
+              ZIO.fromEither(TraxsourceServiceTrack.fromServiceResponse(doc, "03-traxsource-house-all"))
+                .tapError(e => putStrLn(e.toString))
+            }
+            .map(res => assert(res.head.title)(equalTo("Hands Over Your Head      (Original)")))
         }
 
 

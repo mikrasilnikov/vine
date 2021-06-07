@@ -57,6 +57,7 @@ object TraxsourceServiceTrack {
           .replaceAll("(\\{|\\n\\s+|,\\s)(\\w+):\\s", "$1\"$2\": ")
           .replaceAll("\\\\'", "'")
           .replaceAll("\"\"(\\d{12})\"\"", "\"$1\"") // "catnumber": ""884385733490""
+          .replaceAll("\t"," ")
 
         // Создаем декодер для каждой страницы, потому что иначе не получается проставить поле feed
         implicit val trackDecoder: Decoder[TraxsourceServiceTrack] = traxsourceServiceTrackDecoder(feed)
