@@ -1,94 +1,108 @@
 package pd2.ui.consoleprogress
 
 import org.fusesource.jansi.Ansi.ansi
-import pd2.ui.ProgressBar.{ItemState, Pending}
 import pd2.ui.consoleprogress.ConsoleProgressLive.DrawState
-import pd2.ui.{ProgressBar, ProgressBarDimensions, ProgressBarLayout}
-import pd2.ui.consoleprogress.ConsoleProgress.ProgressItem
+import pd2.ui._
+import pd2.ui.consoleprogress.ConsoleProgress.BucketRef
 import zio.console.Console
 import zio.system.System
-import zio.{Ref, RefM, ZIO, ZLayer}
-
+import zio._
 import java.io.IOException
-import java.time.LocalDateTime
-import scala.collection.mutable.ArrayBuffer
 
 final case class ConsoleProgressLive(
   console               : Console.Service,
-  progressBarsRef       : RefM[ArrayBuffer[ProgressBar]],
-  drawState             : Ref[DrawState],
+  progressBarsRef       : RefM[Vector[BucketProgressBar]],
+  drawState             : RefM[DrawState],
   defaultDimensions     : ProgressBarDimensions,
   runningInsideIntellij : Boolean)
   extends ConsoleProgress.Service
 {
-  def updateProgressItem(item : ProgressItem, state: ItemState): ZIO[Any, Nothing, Unit] =
+  def initializeBar(label: String, bucketSizes: Seq[Int])
+  : ZIO[Any, Nothing, Seq[BucketRef]] = {
     progressBarsRef.modify { bars =>
-      for {
-        _         <- ZIO.succeed()
-        barIndex  =  bars.indexWhere(bar => bar.layout.label == item.barLabel)
-        _         =  bars(barIndex).workItems(item.index) = state
-      } yield ((), bars)
-    }
+      ZIO.succeed {
+        val newBuckets = bucketSizes.map(i => ProgressBucket(i, 0, 0)).toVector
+        val refs = bucketSizes.zipWithIndex.map { case (_, index) => BucketRef(label, index) }
 
-  def acquireProgressItems(barLabel: String, amount : Int): ZIO[Any, Nothing, List[ProgressItem]] =
-    progressBarsRef.modify { bars =>
-      for {
-        _ <- ZIO.succeed()
-        barIndex = {
-          val i = bars.indexWhere(bar => bar.layout.label == barLabel)
-          if (i == -1) {
-            bars.append(ProgressBar(ArrayBuffer.empty[ItemState], ProgressBarLayout(barLabel, defaultDimensions)))
-            bars.length - 1
-          } else i
+        val existingBarIndex = bars.indexWhere(_.layout.label == label)
+        existingBarIndex match {
+          case -1 =>
+            val newBar = BucketProgressBar(newBuckets, ProgressBarLayout(label, defaultDimensions))
+            (refs, bars.appended(newBar))
+          case i  =>
+            val newBar = bars(i).copy(buckets = newBuckets)
+            (refs, bars.updated(i, newBar))
         }
-        bar = bars(barIndex)
-        wiCount = bar.workItems.length
-        range = wiCount until wiCount + amount
-        _ = bar.workItems.addAll(range.map(_ => Pending))
-        result = range.map(i => ProgressItem(barLabel, i)).toList
-      } yield (result, bars)
+      }
+    }
+  }
+
+  def completeBar(label: String): ZIO[Any, Nothing, Unit] = {
+    progressBarsRef.modify { bars =>
+      ZIO.succeed {
+        val existingBarIndex = bars.indexWhere(_.layout.label == label)
+        existingBarIndex match {
+          // If there is no existing bar with provided label we append new bar which is completed.
+          case -1 =>
+            val newBar = BucketProgressBar(
+              Vector[ProgressBucket](ProgressBucket(size = 1, completed = 1, failed = 0)),
+              ProgressBarLayout(label, defaultDimensions))
+            ((), bars.appended(newBar))
+          case i =>
+            // Preserving failed items count.
+            val completedBuckets = bars(i).buckets.map(b => ProgressBucket(b.size, b.size - b.failed, b.failed))
+            val newBar = bars(i).copy(buckets = completedBuckets)
+            ((), bars.updated(i, newBar))
+        }
+      }
+    }
+  }
+
+  private def notifyOne(bucketRef: BucketRef, completed : Boolean): ZIO[Any, Nothing, Unit] =
+    progressBarsRef.modify { bars =>
+      ZIO.succeed {
+        val barIndex = bars.indexWhere(_.layout.label == bucketRef.barLabel)
+        barIndex match {
+          case -1 => // This is a defect
+            throw new IllegalStateException(s"Could not find progress bar with label '${bucketRef.barLabel}'")
+          case i =>
+            val j = bucketRef.bucketIndex
+            val oldBucket = bars(i).buckets(j)
+            val newBucket =
+              if (completed) oldBucket.copy(completed = oldBucket.completed + 1)
+              else oldBucket.copy(failed = oldBucket.completed + 1)
+            val updatedBuckets = bars(i).buckets.updated(j, newBucket)
+            ((), bars.updated(i, bars(i).copy(buckets = updatedBuckets)))
+        }
+      }
     }
 
-  def acquireProgressItem(batchName: String)
-    : ZIO[Any, Nothing, ProgressItem] =
-    acquireProgressItems(batchName, 1).map(_.head)
+  def completeOne(bucketRef: BucketRef): ZIO[Any, Nothing, Unit] = notifyOne(bucketRef, true)
+  def failOne(bucketRef: BucketRef): ZIO[Any, Nothing, Unit] = notifyOne(bucketRef, false)
 
-  def drawProgress: ZIO[Any, IOException, Unit] =
-  {
-    import java.time.temporal.ChronoUnit
+  def drawProgress: ZIO[Any, IOException, Unit] = {
     for {
-      state <- drawState.get
-      now   <- ZIO.effectTotal(LocalDateTime.now())
-      tick  =  state.startTime.until(now, ChronoUnit.MILLIS) / 500
-
-      // Hide cursor
-      _ <- console.putStr("\u001b[?25l")
-
-      op    <- drawState.modify { state =>
-                if (state.firstFrame)
-                  (console.putStr(ansi().eraseScreen().cursor(0,0).toString),
-                   state.copy(firstFrame = false))
-                else
-                  (console.putStr(ansi().cursor(0,0).toString),
-                   state)
-               }
-      _     <- op
-
-      _     <- progressBarsRef.modify { bars =>
-                for {
-                  _ <- ZIO.foreach_(bars)(bar => drawProgressBar(bar, tick))
-                } yield ((), bars)
-              }
-
-      // Show cursor
-      _ <- console.putStr("\u001b[?25h")
+      _ <- console.putStr("\u001b[?25l") // Hide cursor
+      _ <- drawState.modify { state =>
+            if (state.firstFrame)
+              console.putStr(ansi().eraseScreen().cursor(0,0).toString)
+                .as((), state.copy(firstFrame = false))
+            else
+              console.putStr(ansi().cursor(0,0).toString)
+                .as((), state)
+           }
+      _ <- progressBarsRef.update { bars =>
+              for {
+                _ <- ZIO.foreach_(bars)(bar => drawProgressBar(bar))
+              } yield bars
+            }
+      _ <- console.putStr("\u001b[?25h") // Show cursor
     } yield ()
   }
 
-  private def drawProgressBar(bar: ProgressBar, tick : Long): ZIO[Any, IOException, Unit] =
-  {
+  private def drawProgressBar(bar: BucketProgressBar): ZIO[Any, IOException, Unit] = {
     for {
-      render  <- ZIO.succeed(ProgressBar.render(bar, tick))
+      render  <- ZIO.succeed(BucketProgressBar.render(bar))
       _       <-  if (!runningInsideIntellij) {
                   console.putStr(ansi().eraseLine().toString) *>
                   console.putStr(render) *>
@@ -103,7 +117,7 @@ final case class ConsoleProgressLive(
 
 object ConsoleProgressLive {
 
-  case class DrawState(startTime : LocalDateTime, firstFrame : Boolean)
+  case class DrawState(firstFrame : Boolean)
 
   def makeLayer(progressBarDimensions: ProgressBarDimensions)
     : ZLayer[System with Console, Throwable, ConsoleProgress] =
@@ -118,12 +132,9 @@ object ConsoleProgressLive {
   : ZIO[Any, Throwable, ConsoleProgressLive] =
    {
       for {
-        osOption        <- system.property("os.name")
-        win             =  osOption.map(_.toLowerCase.contains("windows")).fold(false)(identity)
         insideIntellij  <- runningInsideIntellij(system)
-        bars            <- RefM.make(ArrayBuffer.empty[ProgressBar])
-        now             <- ZIO.effectTotal(LocalDateTime.now())
-        drawState       <- Ref.make(DrawState(startTime = now, firstFrame = true))
+        bars            <- RefM.make(Vector.empty[BucketProgressBar])
+        drawState       <- RefM.make(DrawState(firstFrame = true))
       } yield ConsoleProgressLive(console, bars, drawState, dimensions, insideIntellij)
   }
 

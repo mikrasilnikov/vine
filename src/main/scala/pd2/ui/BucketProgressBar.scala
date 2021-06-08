@@ -2,6 +2,8 @@ package pd2.ui
 
 import org.fusesource.jansi.Ansi.ansi
 
+import scala.collection.mutable
+
 final case class BucketProgressBar(buckets : Vector[ProgressBucket], layout : ProgressBarLayout)
 final case class ProgressBucket(size : Int, completed : Int, failed : Int)
 

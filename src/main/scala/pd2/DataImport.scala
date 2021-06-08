@@ -4,7 +4,6 @@ import pd2.data.TrackParsing._
 import pd2.data._
 import pd2.data.TrackParsing
 import pd2.helpers.Conversions.OptionToZio
-import pd2.ui.ProgressBar.InProgress
 import pd2.ui.ProgressBarDimensions
 import pd2.ui.consoleprogress.{ConsoleProgress, ConsoleProgressLive}
 import slick.jdbc.SQLiteProfile
@@ -92,15 +91,15 @@ object DataImport extends zio.App {
         _ <- putStrLn(s"Dropping index ixUniqueName...")
         _ <- db.run(sqlu""" DROP INDEX "ixUniqueName" """)
 
-        prgItems      <- ConsoleProgress.acquireProgressItems("Processing files", files.length)
+        progressBucket<- ConsoleProgress.initializeBar("Processing files", List(files.length)).map(_.head)
         progressFiber <- ConsoleProgress.drawProgress.repeat(Schedule.duration(333.millis)).forever.fork
 
 
         hashRef   <- Ref.make[HashSet[String]](HashSet[String]())
-        _         <- ZIO.foreach_(files zip prgItems) { case (filePath, prgItem) =>
+        _         <- ZIO.foreach_(files) { filePath =>
                       uniqueTracksStream(filePath, hashRef).foreach { track =>
                         db.run(db.tracks += track) *>
-                        ConsoleProgress.completeProgressItem(prgItem)
+                        ConsoleProgress.completeOne(progressBucket)
                       }
                     }
         _         <- clock.sleep(500.millis) *> progressFiber.interrupt

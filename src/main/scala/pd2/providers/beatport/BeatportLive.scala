@@ -7,14 +7,11 @@ import pd2.helpers.Conversions.EitherToZio
 import pd2.providers.filters.{FilterEnv, TrackFilter}
 import pd2.providers.{Pager, TrackDto}
 import pd2.ui.consoleprogress.ConsoleProgress
-import pd2.ui.consoleprogress.ConsoleProgress.ProgressItem
-import sttp.client3.asByteArray
 import sttp.client3.httpclient.zio.SttpClient
 import sttp.model.Uri
 import zio.clock.Clock
 import zio.logging.Logging
 import zio.{Promise, Semaphore, ZIO, ZLayer}
-
 import java.nio.charset.StandardCharsets
 import java.time.LocalDate
 
@@ -32,45 +29,37 @@ case class BeatportLive(
     pageNum: Int,
     filter: TrackFilter,
     processTrack: (TrackDto, Array[Byte]) => ZIO[R, E, Unit],
-    pageProgressItem: ProgressItem,
     pagePromiseOption: Option[Promise[Throwable, Option[Pager]]])
   : ZIO[
     R with FilterEnv with Clock with Logging with ConnectionsLimiter,
     Throwable, Unit] = {
     for {
-      page                    <- getTracklistWebPage(feed, dateFrom, dateTo, pageProgressItem, pageNum)
+      page                    <- getTracklistWebPage(feed, dateFrom, dateTo, pageNum)
                                   .tapError(e => pagePromiseOption.fold(ZIO.succeed())(promise => promise.fail(e).unit))
       _                       <- pagePromiseOption.fold(ZIO.succeed())(_.succeed(page.pager).unit)
-      _                       <- consoleProgress.completeProgressItem(pageProgressItem)
       filteredTracksWithDtos  <- ZIO.filter(page.tracks.map(st => (st, st.toTrackDto(feed.name)))) { case (_, dto) => filter.check(dto) }
-      tracksProgress          <- consoleProgress.acquireProgressItems(feed.name, filteredTracksWithDtos.length)
-      _                       <- ZIO.foreachParN_(8)(filteredTracksWithDtos zip tracksProgress) { case ((t, dto), p) =>
+      _                       <- ZIO.foreachParN_(8)(filteredTracksWithDtos) { case (t, dto) =>
                                 (for {
-                                  downloadResult <- downloadTrack(t.previewUrl, p)
+                                  downloadResult <- downloadTrack(t.previewUrl)
                                   _ <- downloadResult match {
                                       case TrackDownloadResult.Success(bytes) =>
                                           processTrack(dto, bytes) *>
-                                          filter.done(dto) *>
-                                          consoleProgress.completeProgressItem(p)
+                                          filter.done(dto)
                                       case TrackDownloadResult.Failure =>
-                                          filter.done(dto) *>
-                                          consoleProgress.failProgressItem(p)
+                                          filter.done(dto)
                                       case TrackDownloadResult.Skipped =>
-                                          filter.done(dto) *>
-                                          consoleProgress.completeProgressItem(p)
+                                          filter.done(dto)
                                   }
-                                } yield ()).whenM(
-                                        filter.checkBeforeProcessing(dto)
-                                          .tap(b => ZIO.unless(b)(consoleProgress.completeProgressItem(p))))
+                                } yield ()).whenM(filter.checkBeforeProcessing(dto))
                               }
     } yield ()
   }
 
-  private def getTracklistWebPage(feed: Feed, dateFrom: LocalDate, dateTo: LocalDate, progress : ProgressItem, page: Int = 1)
+  private def getTracklistWebPage(feed: Feed, dateFrom: LocalDate, dateTo: LocalDate, page: Int = 1)
   : ZIO[Clock with Logging with ConnectionsLimiter, Throwable, BeatportPage] = {
     for {
       pageUri   <- buildPageUri(beatportHost, feed.urlTemplate, dateFrom, dateTo, page).toZio
-      pageResp  <- download(pageUri, progress).map(bytes => new String(bytes, StandardCharsets.UTF_8))
+      pageResp  <- download(pageUri).map(bytes => new String(bytes, StandardCharsets.UTF_8))
       page      <- BeatportPage.parse(pageResp).toZio
     } yield page
   }

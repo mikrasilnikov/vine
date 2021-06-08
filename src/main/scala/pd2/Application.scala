@@ -21,7 +21,6 @@ import zio.clock.Clock
 import zio.{Chunk, ExitCode, Has, Ref, Schedule, URIO, ZIO, ZLayer, clock}
 import zio.logging._
 import zio.logging.slf4j.Slf4jLogger
-
 import java.time.format.DateTimeFormatter
 import java.time.{LocalDate, LocalDateTime}
 import scala.util.Try
@@ -74,7 +73,7 @@ object Application extends zio.App {
 
       // Сначала регистрируем фиды, остортированные по приоритету в ConsoleProgress (запрашивая 0 Item-ов для каждого)
       sortedFeeds    = feedsByPriority.flatMap { case (_, value) => value }
-      _             <- ZIO.foreach_(sortedFeeds)(f => ConsoleProgress.acquireProgressItems(f.name, 0))
+      _             <- ZIO.foreach_(sortedFeeds)(f => ConsoleProgress.initializeBar(f.name, List()))
 
       // Обрабатываем фиды по приоритетам
       _             <- ZIO.foreach_(feedsByPriority) { case (_, items) =>

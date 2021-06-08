@@ -1,6 +1,6 @@
 package pd2.conlimiter.test
 
-import pd2.conlimiter.{ConnectionsLimiter, ConnectionsLimiterLive}
+import pd2.conlimiter.ConnectionsLimiterLive
 import sttp.model.Uri
 import zio._
 import zio.clock.Clock
