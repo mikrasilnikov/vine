@@ -14,7 +14,7 @@ package object consoleprogress {
   @accessible
   object ConsoleProgress {
 
-    case class ProgressItem(barLabel: String, index: Int)
+    final case class ProgressItem(barLabel: String, index: Int)
 
     trait Service
     {

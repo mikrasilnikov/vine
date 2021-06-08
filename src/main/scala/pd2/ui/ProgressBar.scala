@@ -7,9 +7,6 @@ final case class ProgressBar(workItems : ArrayBuffer[ItemState], layout: Progres
 
 object ProgressBar {
 
-  case class ProgressBarDimensions(labelWidth: Int, barWidth: Int)
-  case class ProgressBarLayout(label : String, dimensions : ProgressBarDimensions)
-
   sealed trait ItemState
   case object Pending     extends ItemState
   case object InProgress  extends ItemState
@@ -31,7 +28,6 @@ object ProgressBar {
         else {
           if (bar.workItems.nonEmpty) Vector(bar.workItems(fromInt))
           else Vector(Pending) // Если bar пустой, то считаем, что он содержит 1 Pending элемент
-
         }
       }
       .map { items =>

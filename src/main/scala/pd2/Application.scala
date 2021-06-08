@@ -8,7 +8,6 @@ import pd2.data.{Backend, DatabaseService}
 import pd2.providers.{TrackDto, filters, getProviderByFeedTag}
 import pd2.providers.beatport.{Beatport, BeatportLive}
 import pd2.providers.traxsource.{Traxsource, TraxsourceLive}
-import pd2.ui.ProgressBar.ProgressBarDimensions
 import pd2.ui.consoleprogress.{ConsoleProgress, ConsoleProgressLive}
 import slick.jdbc.SQLiteProfile
 import zio.blocking.Blocking
@@ -28,6 +27,7 @@ import java.time.{LocalDate, LocalDateTime}
 import scala.util.Try
 import org.fusesource.jansi.AnsiConsole
 import pd2.conlimiter.{ConnectionsLimiter, ConnectionsLimiterLive}
+import pd2.ui.ProgressBarDimensions
 
 object Application extends zio.App {
 

@@ -1,13 +1,14 @@
 package pd2.ui.consoleprogress
 
 import org.fusesource.jansi.Ansi.ansi
-import pd2.ui.ProgressBar.{ItemState, Pending, ProgressBarDimensions, ProgressBarLayout}
-import pd2.ui.consoleprogress.ConsoleProgress.ProgressItem
+import pd2.ui.ProgressBar.{ItemState, Pending}
 import pd2.ui.consoleprogress.ConsoleProgressLive.DrawState
-import pd2.ui.ProgressBar
+import pd2.ui.{ProgressBar, ProgressBarDimensions, ProgressBarLayout}
+import pd2.ui.consoleprogress.ConsoleProgress.ProgressItem
+import zio.console.Console
 import zio.system.System
-import zio.console.{Console, putStrLn}
-import zio.{Has, Ref, RefM, Task, ZIO, ZLayer}
+import zio.{Ref, RefM, ZIO, ZLayer}
+
 import java.io.IOException
 import java.time.LocalDateTime
 import scala.collection.mutable.ArrayBuffer

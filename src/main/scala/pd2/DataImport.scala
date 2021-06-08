@@ -4,7 +4,8 @@ import pd2.data.TrackParsing._
 import pd2.data._
 import pd2.data.TrackParsing
 import pd2.helpers.Conversions.OptionToZio
-import pd2.ui.ProgressBar.{InProgress, ProgressBarDimensions}
+import pd2.ui.ProgressBar.InProgress
+import pd2.ui.ProgressBarDimensions
 import pd2.ui.consoleprogress.{ConsoleProgress, ConsoleProgressLive}
 import slick.jdbc.SQLiteProfile
 import zio._
@@ -15,6 +16,7 @@ import zio.duration.durationInt
 import zio.nio.core.file._
 import zio.nio.file._
 import zio.stream.{Sink, ZStream}
+
 import java.io.IOException
 import java.nio.charset.StandardCharsets
 import java.time.LocalDate

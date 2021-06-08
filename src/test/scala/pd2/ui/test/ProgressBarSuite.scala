@@ -1,9 +1,9 @@
 package pd2.ui.test
 
-import pd2.ui.ProgressBar.{Completed, Failed, InProgress, ItemState, Pending, ProgressBarDimensions, ProgressBarLayout}
+import pd2.ui.ProgressBar.{Completed, Failed, InProgress, ItemState, Pending}
 import zio.test._
 import zio.test.Assertion._
-import pd2.ui.{ProgressBar}
+import pd2.ui.{ProgressBar, ProgressBarDimensions, ProgressBarLayout}
 import zio.test.DefaultRunnableSpec
 
 import scala.collection.mutable.ArrayBuffer
