@@ -2,6 +2,7 @@ package pd2.providers.beatport
 
 import pd2.config.Config
 import pd2.config.ConfigDescription.Feed
+import pd2.conlimiter.ConnectionsLimiter
 import pd2.helpers.Conversions.EitherToZio
 import pd2.providers.filters.{FilterEnv, TrackFilter}
 import pd2.providers.{Pager, TrackDto}
@@ -19,9 +20,7 @@ import java.time.LocalDate
 
 case class BeatportLive(
   consoleProgress     : ConsoleProgress.Service,
-  sttpClient          : SttpClient.Service,
-  providerSemaphore   : Semaphore,
-  globalSemaphore     : Semaphore)
+  sttpClient          : SttpClient.Service)
   extends Beatport.Service {
 
   val beatportHost = "https://www.beatport.com"
@@ -35,7 +34,9 @@ case class BeatportLive(
     processTrack: (TrackDto, Array[Byte]) => ZIO[R, E, Unit],
     pageProgressItem: ProgressItem,
     pagePromiseOption: Option[Promise[Throwable, Option[Pager]]])
-  : ZIO[R with FilterEnv with Clock with Logging, Throwable, Unit] = {
+  : ZIO[
+    R with FilterEnv with Clock with Logging with ConnectionsLimiter,
+    Throwable, Unit] = {
     for {
       page                    <- getTracklistWebPage(feed, dateFrom, dateTo, pageProgressItem, pageNum)
                                   .tapError(e => pagePromiseOption.fold(ZIO.succeed())(promise => promise.fail(e).unit))
@@ -66,22 +67,18 @@ case class BeatportLive(
   }
 
   private def getTracklistWebPage(feed: Feed, dateFrom: LocalDate, dateTo: LocalDate, progress : ProgressItem, page: Int = 1)
-  : ZIO[Clock with Logging, Throwable, BeatportPage] = {
+  : ZIO[Clock with Logging with ConnectionsLimiter, Throwable, BeatportPage] = {
     for {
       pageUri   <- buildPageUri(beatportHost, feed.urlTemplate, dateFrom, dateTo, page).toZio
       pageResp  <- download(pageUri, progress).map(bytes => new String(bytes, StandardCharsets.UTF_8))
       page      <- BeatportPage.parse(pageResp).toZio
     } yield page
   }
-
-
 }
 
 object BeatportLive {
-  def makeLayer(maxConcurrentConnections : Int): ZLayer[Config with ConsoleProgress with SttpClient, Nothing, Beatport] =
-    ZLayer.fromServicesM[Config.Service, ConsoleProgress.Service, SttpClient.Service, Any, Nothing, Beatport.Service] {
-      case (config, consoleProgress, sttpClient) => for {
-        providerSemaphore <- Semaphore.make(maxConcurrentConnections)
-      } yield BeatportLive(consoleProgress, sttpClient, providerSemaphore, config.globalConnSemaphore)
+  def makeLayer: ZLayer[Config with ConsoleProgress with SttpClient, Nothing, Beatport] =
+    ZLayer.fromServices[ConsoleProgress.Service, SttpClient.Service, Beatport.Service] {
+      (consoleProgress, sttpClient) => BeatportLive(consoleProgress, sttpClient)
     }
 }

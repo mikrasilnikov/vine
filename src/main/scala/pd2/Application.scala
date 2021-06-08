@@ -22,10 +22,12 @@ import zio.clock.Clock
 import zio.{Chunk, ExitCode, Has, Ref, Schedule, URIO, ZIO, ZLayer, clock}
 import zio.logging._
 import zio.logging.slf4j.Slf4jLogger
+
 import java.time.format.DateTimeFormatter
 import java.time.{LocalDate, LocalDateTime}
 import scala.util.Try
 import org.fusesource.jansi.AnsiConsole
+import pd2.conlimiter.{ConnectionsLimiter, ConnectionsLimiterLive}
 
 object Application extends zio.App {
 
@@ -142,7 +144,7 @@ object Application extends zio.App {
 
   def processFeed(feed : Feed, refDtos : Ref[List[TrackDto]])
   : ZIO[
-    Traxsource with Beatport with FilterEnv with Blocking with ConsoleProgress with Clock with Logging,
+    Traxsource with Beatport with FilterEnv with Blocking with ConsoleProgress with Clock with Logging with ConnectionsLimiter,
     Throwable, Unit] =
     for {
       feedFilter  <- ZIO.succeed(feed.filterTags
@@ -189,33 +191,30 @@ object Application extends zio.App {
   : ZLayer[
     Console with Blocking,
     Throwable,
-    Traxsource with Beatport with ConsoleProgress with Config with Has[DatabaseService] with Logging] =
+    Traxsource with Beatport with ConsoleProgress with Config with Has[DatabaseService] with Logging with ConnectionsLimiter] =
   {
     import sttp.client3.httpclient.zio.HttpClientZioBackend
 
     val configLayer = Config.makeLayer(configFilePath, dateFrom, dateTo, maxConnections, downloadTracks)
+
+    val connectionsLimiter = ConnectionsLimiterLive.makeLayer(maxConnections, perHostLimit = 8)
+
     val consoleProgress = (System.live ++ Console.live) >>>
       ConsoleProgressLive.makeLayer(barDimensions)
 
     val traxsourceLive = configLayer ++
-      (consoleProgress ++ HttpClientZioBackend.layer()) >>> TraxsourceLive.makeLayer(8)
+      (consoleProgress ++ HttpClientZioBackend.layer()) >>> TraxsourceLive.makeLayer
 
     val beatportLive = configLayer ++
-      (consoleProgress ++ HttpClientZioBackend.layer()) >>> BeatportLive.makeLayer(8)
+      (consoleProgress ++ HttpClientZioBackend.layer()) >>> BeatportLive.makeLayer
 
     val database =
       Backend.makeLayer(SQLiteProfile, Backend.makeSqliteLiveConfig(dbFilePath)) >>>
       DatabaseService.makeLayer(SQLiteProfile)
 
-    val logging = Slf4jLogger.make { (context:LogContext, message) =>
-      val logFormat = "[correlation-id = %s] %s"
-      val correlationId = LogAnnotation.CorrelationId.render(
-        context.get(LogAnnotation.CorrelationId)
-      )
-      //logFormat.format(correlationId, message)
-      message
-    }
-    traxsourceLive ++ beatportLive ++ consoleProgress ++ configLayer ++ database ++ logging
+    val logging = Slf4jLogger.make ((_, message) => message)
+
+    traxsourceLive ++ beatportLive ++ consoleProgress ++ configLayer ++ database ++ logging ++ connectionsLimiter
   }
 
   def configureLogging(): Unit = {

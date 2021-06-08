@@ -1,6 +1,7 @@
 package pd2.providers
 
 import pd2.config.ConfigDescription.Feed
+import pd2.conlimiter.ConnectionsLimiter
 import pd2.providers.filters._
 import pd2.ui.consoleprogress._
 import zio.{Has, ZIO}
@@ -23,7 +24,9 @@ package object beatport {
         dateTo      : LocalDate,
         filter      : TrackFilter,
         processTrack: (TrackDto, Array[Byte]) => ZIO[R, E, Unit])
-      : ZIO[R with FilterEnv with ConsoleProgress with Clock with Logging, Throwable, Unit]
+      : ZIO[
+        R with FilterEnv with ConsoleProgress with Clock with Logging with ConnectionsLimiter,
+        Throwable, Unit]
     }
   }
 }

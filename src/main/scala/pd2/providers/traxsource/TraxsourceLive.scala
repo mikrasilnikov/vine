@@ -2,6 +2,7 @@ package pd2.providers.traxsource
 
 import pd2.config.Config
 import pd2.config.ConfigDescription.Feed
+import pd2.conlimiter.ConnectionsLimiter
 import pd2.helpers.Conversions.EitherToZio
 import pd2.providers.Exceptions.{BadContentLength, InternalConfigurationError, ServiceUnavailable}
 import pd2.providers.filters.{FilterEnv, TrackFilter}
@@ -23,9 +24,7 @@ import java.time.LocalDate
 
 case class TraxsourceLive(
   consoleProgress     : ConsoleProgress.Service,
-  sttpClient          : SttpClient.Service,
-  providerSemaphore   : Semaphore,
-  globalSemaphore     : Semaphore)
+  sttpClient          : SttpClient.Service)
   extends Traxsource.Service
 {
   private val traxsourceHost = "https://www.traxsource.com"
@@ -39,7 +38,7 @@ case class TraxsourceLive(
     processTrack     : (TrackDto, Array[Byte]) => ZIO[R, E, Unit],
     pageProgressItem : ProgressItem,
     pagePromiseOption: Option[Promise[Throwable, Option[Pager]]])
-  : ZIO[R with FilterEnv with Clock with Logging, Throwable, Unit] =
+  : ZIO[R with FilterEnv with Clock with Logging with ConnectionsLimiter, Throwable, Unit] =
   {
     for {
       page                    <- getTracklistWebPage(feed, dateFrom, dateTo, pageProgressItem, pageNum)
@@ -81,7 +80,7 @@ case class TraxsourceLive(
 
   private def getTracklistWebPage(
     feed : Feed, dateFrom : LocalDate, dateTo : LocalDate, progress : ProgressItem, page: Int = 1)
-  : ZIO[Clock with Logging, Throwable, TraxsourcePage] =
+  : ZIO[Clock with Logging with ConnectionsLimiter, Throwable, TraxsourcePage] =
   {
     for {
       uri       <- buildPageUri(traxsourceHost, feed.urlTemplate, dateFrom, dateTo, page).toZio
@@ -91,7 +90,7 @@ case class TraxsourceLive(
   }
 
   private def getServiceData(trackIds : List[Int], feed : String, progressItem : ProgressItem)
-  : ZIO[Clock with Logging, Throwable, List[TraxsourceServiceTrack]] =
+  : ZIO[Clock with Logging with ConnectionsLimiter, Throwable, List[TraxsourceServiceTrack]] =
   {
     for {
       serviceUri  <- buildTraxsourceServiceRequest(trackIds).toZio
@@ -108,10 +107,8 @@ case class TraxsourceLive(
 }
 
 object TraxsourceLive {
-  def makeLayer(maxConcurrentConnections : Int): ZLayer[Config with ConsoleProgress with SttpClient, Nothing, Traxsource] =
-    ZLayer.fromServicesM[Config.Service, ConsoleProgress.Service, SttpClient.Service, Any, Nothing, Traxsource.Service] {
-    case (config, consoleProgress, sttpClient) => for {
-      providerSemaphore <- Semaphore.make(maxConcurrentConnections)
-    } yield TraxsourceLive(consoleProgress, sttpClient, providerSemaphore, config.globalConnSemaphore)
+  def makeLayer : ZLayer[Config with ConsoleProgress with SttpClient, Nothing, Traxsource] =
+    ZLayer.fromServices[ConsoleProgress.Service, SttpClient.Service, Traxsource.Service] {
+      (consoleProgress, sttpClient) => TraxsourceLive(consoleProgress, sttpClient)
   }
 }

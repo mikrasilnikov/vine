@@ -1,5 +1,6 @@
-import java.time.LocalDateTime
-361371300 / 1_000_000
+import sttp.model.Uri
 
-LocalDateTime.now()
-LocalDateTime.now().withNano(0)
+import java.time.OffsetDateTime
+import scala.::
+
+OffsetDateTime.now().toString

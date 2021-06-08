@@ -2,6 +2,7 @@ package pd2.providers
 
 import pd2.config.Config
 import pd2.config.ConfigDescription.Feed
+import pd2.conlimiter.ConnectionsLimiter
 import pd2.providers.Exceptions.{BadContentLength, InternalConfigurationError, ServiceUnavailable}
 import pd2.providers.filters.{FilterEnv, TrackFilter}
 import sttp.client3
@@ -26,8 +27,6 @@ trait MusicStoreDataProvider {
 
     protected val consoleProgress   : ConsoleProgress.Service
     protected val sttpClient        : SttpClient.Service
-    protected val providerSemaphore : Semaphore
-    protected val globalSemaphore   : Semaphore
 
     protected val providerBasicRequest: RequestT[Empty, Either[String, String], Any] = basicRequest
       .header(HeaderNames.UserAgent,
@@ -54,7 +53,7 @@ trait MusicStoreDataProvider {
       dateTo        : LocalDate,
       filter        : TrackFilter,
       processTrack  : (TrackDto, Array[Byte]) => ZIO[R, E, Unit])
-    : ZIO[R with FilterEnv with Clock with Logging, Throwable, Unit] = {
+    : ZIO[R with FilterEnv with Clock with Logging with ConnectionsLimiter, Throwable, Unit] = {
         // Если фид от даты не зависит (например, это топ-100), то достаточно один раз скачать выборку,
         // указав любую дату (дата все равно не попадет в url при подстановке).
         if (!feed.dependsOnDate || dateFrom.plusDays(1) == dateTo) {
@@ -70,7 +69,7 @@ trait MusicStoreDataProvider {
       date          : LocalDate,
       filter        : TrackFilter,
       processTrack  : (TrackDto, Array[Byte]) => ZIO[R, E, Unit])
-    : ZIO[R with FilterEnv with Clock with Logging, Throwable, Unit] =
+    : ZIO[R with FilterEnv with Clock with Logging with ConnectionsLimiter, Throwable, Unit] =
     {
         for {
             progress          <- consoleProgress.acquireProgressItem(feed.name)
@@ -103,7 +102,7 @@ trait MusicStoreDataProvider {
       processTrack     : (TrackDto, Array[Byte]) => ZIO[R, E, Unit],
       pageProgressItem : ProgressItem,
       pagePromiseOption: Option[Promise[Throwable, Option[Pager]]])
-    : ZIO[R with FilterEnv with Clock with Logging, Throwable, Unit]
+    : ZIO[R with FilterEnv with Clock with Logging with ConnectionsLimiter, Throwable, Unit]
 
     private[providers] def buildPageUri(
       host        : String,
@@ -133,7 +132,7 @@ trait MusicStoreDataProvider {
      * попыток возващает последнюю ошибку.
      */
     protected def download(uri : Uri, progressItem : ProgressItem)
-    : ZIO[Clock with Logging, Throwable, Array[Byte]] =
+    : ZIO[Clock with Logging with ConnectionsLimiter, Throwable, Array[Byte]] =
     {
         def send(req : SttpBytesRequest) : ZIO[Clock, Throwable, Array[Byte]] = for {
             resp        <- sttpClient.send(req).timeoutFail(ServiceUnavailable("Timeout", uri))(5.minutes)
@@ -147,20 +146,19 @@ trait MusicStoreDataProvider {
             req             <- ZIO.effect(providerBasicRequest.get(uri).response(asByteArray))
             schedule        =  Schedule.recurs(10) && Schedule.spaced(5.seconds)
             updateProgress  =  consoleProgress.updateProgressItem(progressItem, ProgressBar.InProgress)
-            resp            <- globalSemaphore.withPermit(
-                                    providerSemaphore.withPermit(
-                                        log.trace(s"$uri") *>
-                                        send(req).tapError { e =>
-                                            log.warn(s"Retrying\n$uri\n(failed with ${e.toString})") *>
-                                            updateProgress }
-                                ))
+            resp            <- ConnectionsLimiter.withPermit(uri) {
+                                    log.trace(s"$uri") *>
+                                    send(req).tapError { e =>
+                                        log.warn(s"Retrying\n$uri\n(failed with ${e.toString})") *>
+                                        updateProgress }
+                                }
                                 .retry(schedule)
                                 .tapError(e => log.warn(s"Could not download $uri, error: $e"))
         } yield resp
     }
 
     protected def downloadTrack(trackUri: Uri, progressItem : ProgressItem)
-    : ZIO[Clock with Logging with Config, Throwable, TrackDownloadResult] = {
+    : ZIO[Clock with Logging with Config with ConnectionsLimiter, Throwable, TrackDownloadResult] = {
         for {
             downloadTrack   <- Config.downloadTracks
             result          <- if (downloadTrack)
