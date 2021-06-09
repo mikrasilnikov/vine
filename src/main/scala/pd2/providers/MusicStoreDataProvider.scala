@@ -49,24 +49,22 @@ trait MusicStoreDataProvider {
       filter        : TrackFilter,
       processTrack  : (TrackDto, Array[Byte]) => ZIO[R, E, Unit])
     : ZIO[R with FilterEnv with Clock with Logging with ConnectionsLimiter, Throwable, Unit] =
-    {
-        for {
-            pagerPromise      <- Promise.make[Throwable, Option[Pager]]
-            firstPageFiber    <- processTracklistPage(
-                                    feed, date, dateTo, 1,
-                                    filter, processTrack, Some(pagerPromise))
-                                 .fork
-            pager             <- pagerPromise.await
-            remainingPages    =  pager.fold(Nil:List[Int])(_.remainingPages)
-            _                 <- ZIO.foreachParN_(8)(remainingPages) { case page =>
-                                    processTracklistPage(feed, date, dateTo, page,
-                                    filter, processTrack, None)
-                                }
-            _                 <- firstPageFiber.join
+     for {
+        pagerPromise    <- Promise.make[Throwable, Option[Pager]]
+        firstPageFiber  <- processTracklistPage(
+                                feed, date, dateTo, 1,
+                                filter, processTrack, Some(pagerPromise))
+                             .fork
+        pager           <- pagerPromise.await
+        remainingPages  =  pager.fold(List[Int]())(_.remainingPages)
+        _               <- ZIO.foreachParN_(8)(remainingPages) { page =>
+                                processTracklistPage(feed, date, dateTo, page,
+                                filter, processTrack, None)
+                            }
+        _               <- firstPageFiber.join
+        _               <- consoleProgress.completeBar(feed.name)
+     } yield ()
 
-            lastProgress      <- consoleProgress.completeBar(feed.name)
-        } yield ()
-    }
 
     def processTracklistPage[R, E <: Throwable](
       feed             : Feed,

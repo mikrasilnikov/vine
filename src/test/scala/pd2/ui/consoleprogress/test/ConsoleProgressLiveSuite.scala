@@ -85,6 +85,5 @@ object ConsoleProgressLiveSuite  extends DefaultRunnableSpec {
           assert(bars.length)(equalTo(1)) &&
             assert(bars.head.buckets)(equalTo(expected))
       },
-
     )
 }

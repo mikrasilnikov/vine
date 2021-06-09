@@ -5,7 +5,7 @@ import pd2.config.test.ConfigMock
 import pd2.data.DatabaseService
 import pd2.data.test.{TestBackend, TestDatabaseService}
 import pd2.providers.TrackDto
-import pd2.providers.filters.test.OnlyNewFilterSuite.{suite, testM}
+import pd2.processing.test.DeduplicationSuite.{suite, testM}
 import zio.ZIO
 import zio.logging.slf4j.Slf4jLogger
 import zio.test.Assertion.{anything, equalTo, isFalse, isTrue}

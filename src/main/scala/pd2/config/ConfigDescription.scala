@@ -35,10 +35,10 @@ object ConfigDescription {
   sealed trait FilterTag
   object FilterTag {
     case object My              extends FilterTag
-    case object OnlyNew         extends FilterTag
     case object IgnoredLabels   extends FilterTag
     case object NoCompilations  extends FilterTag
     case object NoEdits         extends FilterTag
+    case object OnlyNew         extends FilterTag
   }
 
   final case class Feed(

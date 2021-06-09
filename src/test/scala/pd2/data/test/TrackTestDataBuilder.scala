@@ -43,7 +43,7 @@ case class TrackTestDataBuilder(
     ZIO.service[DatabaseService].flatMap { db =>
       import db.profile.api._
       for {
-        newId <- db.run(db.tracks += entity)
+        newId <- db.run(db.tracks returning db.tracks.map(_.id) += entity)
       } yield entity.copy(id = newId)
     }
   }
