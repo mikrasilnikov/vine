@@ -168,7 +168,7 @@ object DeduplicationSuite extends DefaultRunnableSpec {
         test.provideCustomLayer(
           TestBackend.makeLayer >>> TestDatabaseService.makeLayer ++ configMock ++ Slf4jLogger.make((_, s) => s))
       },
-      
+
       testM("Deduplication.markAsCompleted - Duplicate") {
 
         val trackBuilder = TrackTestDataBuilder.empty
