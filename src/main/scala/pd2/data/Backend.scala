@@ -15,6 +15,7 @@ object Backend {
     configMap.put("driver", "org.sqlite.JDBC")
     configMap.put("url", s"jdbc:sqlite:$path")
     configMap.put("connectionPool", "disabled")
+    configMap.put("connectionInitSql", "PRAGMA journal_mode = WAL;PRAGMA synchronous = NORMAL")
 
     ConfigFactory.parseMap(configMap)
   }
