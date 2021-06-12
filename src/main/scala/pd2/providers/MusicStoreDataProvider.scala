@@ -51,7 +51,8 @@ trait MusicStoreDataProvider {
       feed          : Feed,
       dateFrom      : LocalDate,
       dateTo        : LocalDate,
-      queue         : Queue[TrackMsg])
+      queue         : Queue[TrackMsg],
+      completionP   : Promise[Nothing, Unit])
     : ZIO[Clock with Logging with ConnectionsLimiter with ConsoleProgress, Throwable, Unit] =
      for {
         firstSummaryP   <- Promise.make[Throwable, PageSummary]
@@ -93,8 +94,7 @@ trait MusicStoreDataProvider {
                 }
 
         _   <- firstFiber.join
-        _   <- ZIO.sleep(1.second).repeatUntilM(_ => queue.size.map(_ <= 0))
-        _   <- queue.shutdown
+        _   <- completionP.succeed()
      } yield ()
 
     def processTracklistPage(

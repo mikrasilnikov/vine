@@ -103,27 +103,30 @@ object Application extends zio.App {
       (from, to)  <- Config.dateFrom <*> Config.dateTo
       workerNum   <- Config.connectionsPerHost
       provider    <- getProviderByFeedTag(feed.tag)
-      queue       <- Queue.bounded[TrackMsg](1000)
       filter      =  feed.filterTags.map(getFilterByTag).foldLeft(filters.withArtistAndTitle)(_ ++ _)
 
-      workersFib  <- ZIO.forkAll(List.fill(workerNum)(worker(queue, filter, feedPath, folderSem)))
-      _           <- provider.processTracks(feed, from, to, queue)
-      _           <- workersFib.join.foldCause(_ => (), _ => ())
+      queue       <- Queue.bounded[TrackMsg](1000)
+      completionP <- Promise.make[Nothing, Unit]
+
+      workersFib  <- ZIO.forkAll(List.fill(workerNum)(
+                      createWorker(queue, completionP)(msg => processTrack(msg, filter, feedPath, folderSem))))
+      _           <- provider.processTracks(feed, from, to, queue, completionP)
+      _           <- workersFib.join
     } yield ()
   }
 
-  def worker(
-    queue : Queue[TrackMsg],
-    filter : TrackFilter,
-    targetPath : Path,
-    folderSem : Semaphore) =
+  def processTrack(
+    msg         : TrackMsg,
+    filter      : TrackFilter,
+    targetPath  : Path,
+    folderSem   : Semaphore) =
   {
-    def deduplicateOrDownload(msg : TrackMsg) = for
-    {
+    def deduplicateOrDownload(msg : TrackMsg) = for {
       dResult <- Deduplication.deduplicateOrEnqueue(msg.dto)
 
+      fileName=  makeFileName(msg.dto)
       download=  ZIO.effect(Uri.unsafeParse(msg.dto.mp3Url))
-                  .flatMap(uri => Saving.downloadWithRetry(uri, targetPath, folderSem)
+                  .flatMap(uri => Saving.downloadWithRetry(uri, targetPath / fileName, folderSem)
                     .whenM(Config.downloadTracks))
       _       <- dResult match {
                     case Duplicate(_)   => ZIO.succeed()
@@ -134,16 +137,36 @@ object Application extends zio.App {
       _       <- Deduplication.markAsCompleted(dResult)
     } yield ()
 
-    val process1 = for {
-      msg <- queue.take
+    for {
       _ <- deduplicateOrDownload(msg).whenM(filter.check(msg.dto))
             .foldCauseM( // Report error to user, continue processing
               c =>  log.error(s"Download failed\nUrl: ${msg.dto.mp3Url}\n${c.prettyPrint}") *>
                     ConsoleProgress.failOne(msg.bucketRef),
               _ =>  ConsoleProgress.completeOne(msg.bucketRef))
     } yield ()
+  }
 
-    process1.forever
+  def makeFileName(dto : TrackDto): String = {
+    val durationStr = f"${dto.duration.toSeconds / 60}%02d:${dto.duration.toSeconds % 60}%02d"
+    val withoutExt = s"[${dto.label}] [${dto.releaseName}] - ${dto.artist} - ${dto.title} - [$durationStr]"
+    // Имя файла не должно быть длиннее 255 символов для windows
+    (if (withoutExt.length >= 251) withoutExt.substring(0, 251) else withoutExt) ++ ".mp3"
+  }
+
+  private def createWorker[A, R](queue: Queue[A], drainSignal: Promise[Nothing, Unit])(process : A => ZIO[R, Throwable, Unit])
+  : ZIO[R, Throwable, Unit] =
+  {
+    def take: ZIO[R, Throwable, Unit] = for {
+      msg <- queue.take.map(Some(_)) race drainSignal.await.as(None)
+      _   <- msg.fold(drain)(a => process(a) *> take)
+    } yield ()
+
+    def drain: ZIO[R, Throwable, Unit] = for {
+      msg <- queue.poll
+      _   <- msg.fold[ZIO[R, Throwable, Unit]](ZIO.succeed())(a => process(a) *> drain)
+    } yield ()
+
+    ZIO.ifM(drainSignal.isDone)(drain, take)
   }
 
   def logErrors[R,E,A](effect : ZIO[R,E,A]): ZIO[Blocking with Config with R, Any, A] = effect
@@ -151,7 +174,7 @@ object Application extends zio.App {
       now       <- ZIO.effectTotal(LocalDateTime.now())
       appPath   <- Config.appPath
       fileName  =  s"error-${now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"))}.txt"
-        .replaceAll(":", "")
+                    .replaceAll(":", "")
       _         <- Files.writeLines(appPath / Path(fileName), List(e.prettyPrint))
     } yield ())
 
@@ -192,13 +215,6 @@ object Application extends zio.App {
     } yield res
 
     parseResult.orElse(default)
-  }
-
-  def makeFileName(dto : TrackDto): String = {
-    val durationStr = f"${dto.duration.toSeconds / 60}%02d:${dto.duration.toSeconds % 60}%02d"
-    val withoutExt = s"[${dto.label}] [${dto.releaseName}] - ${dto.artist} - ${dto.title} - [$durationStr]"
-    // Имя файла не должно быть длиннее 255 символов для windows
-    (if (withoutExt.length >= 251) withoutExt.substring(0, 251) else withoutExt) ++ ".mp3"
   }
 
   def makeEnvironment(

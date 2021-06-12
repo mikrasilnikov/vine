@@ -3,6 +3,7 @@ package pd2.processing
 import pd2.conlimiter.ConnectionsLimiter
 import pd2.helpers.Conversions._
 import pd2.providers.Exceptions._
+import pd2.providers.TrackDto
 import sttp.client3
 import sttp.client3._
 import sttp.client3.httpclient.zio.SttpClient
@@ -45,7 +46,8 @@ object Saving {
                   }.retry(schedule)
                   .tapError(e => log.warn(s"Could not download $uri, error: $e"))
 
-      _         <- folderSem.withPermit(Files.createDirectory(to.parent.get).whenM(Files.notExists(to.parent.get)))
+      directory =  to.parent.get
+      _         <- folderSem.withPermit(Files.createDirectory(directory).whenM(Files.notExists(directory)))
       _         <- Files.writeBytes(to, Chunk.fromArray(resp))
     } yield ()
   }
