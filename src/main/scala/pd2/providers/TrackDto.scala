@@ -14,11 +14,12 @@ case class TrackDto(
   releaseDate : LocalDate,
   duration    : Duration,
   feed        : String,
-  internalId  : Int)
+  internalId  : Int,
+  mp3Url      : String)
 {
-  val uniqueNameOption: Option[String] = TrackParsing.getUniqueNameOption(artist, title)
+  def uniqueNameOption: Option[String] = TrackParsing.getUniqueNameOption(artist, title)
 
-  val uniqueNameZio: URIO[Any, String] =
+  def uniqueNameZio: URIO[Any, String] =
     ZIO.fromOption(uniqueNameOption)
       .orDieWith(_ => new IllegalStateException(s"Could not produce uniqueNameOption for ${artist} - ${title}"))
 

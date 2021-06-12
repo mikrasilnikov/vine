@@ -1,18 +1,20 @@
 package pd2.providers.traxsource
 
+import pd2.Application.TrackMsg
 import pd2.config.Config
 import pd2.config.ConfigDescription.Feed
 import pd2.conlimiter.ConnectionsLimiter
 import pd2.helpers.Conversions.EitherToZio
 import pd2.providers.Exceptions.InternalConfigurationError
 import pd2.providers.filters.{FilterEnv, TrackFilter}
-import pd2.providers.{Pager, TrackDto}
+import pd2.providers.{PageSummary, Pager, TrackDto}
 import pd2.ui.consoleprogress.ConsoleProgress
+import pd2.ui.consoleprogress.ConsoleProgress.BucketRef
 import sttp.client3.httpclient.zio.SttpClient
 import sttp.model.Uri
 import zio.clock.Clock
-import zio.logging.Logging
-import zio.{Promise, ZIO, ZLayer}
+import zio.logging.{Logging, log}
+import zio.{Promise, Queue, ZIO, ZLayer}
 
 import java.nio.charset.StandardCharsets
 import java.time.LocalDate
@@ -24,41 +26,38 @@ case class TraxsourceLive(
 {
   private val traxsourceHost = "https://www.traxsource.com"
 
-  def processTracklistPage[R, E <: Throwable](
+  override def processTracklistPage(
     feed             : Feed,
     dateFrom         : LocalDate,
     dateTo           : LocalDate,
     pageNum          : Int,
-    filter           : TrackFilter,
-    processTrack     : (TrackDto, Array[Byte]) => ZIO[R, E, Unit],
-    pagePromiseOption: Option[Promise[Throwable, Option[Pager]]])
-  : ZIO[R with FilterEnv with Clock with Logging with ConnectionsLimiter, Throwable, Unit] =
+    queue            : Queue[TrackMsg],
+    inBucket         : Promise[Throwable, BucketRef],
+    outSummary       : Promise[Throwable, PageSummary])
+  : ZIO[Clock with Logging with ConnectionsLimiter with ConsoleProgress, Throwable, Unit] =
   {
     for {
-      page                    <- getTracklistWebPage(feed, dateFrom, dateTo, pageNum)
-                                  .tapError(e => pagePromiseOption.fold(ZIO.succeed())(promise => promise.fail(e).unit))
-      _                       <- pagePromiseOption.fold(ZIO.succeed())(_.succeed(page.pager).unit)
-
-      serviceTracks           <- if (page.trackIds.nonEmpty) getServiceData(page.trackIds, feed.name)
-                                 else ZIO.succeed(List())
-
-      filteredTracksWithDtos  <- ZIO.filter(serviceTracks.map(st => (st, st.toTrackDto))) { case (_, dto) => filter.check(dto) }
-
-      _                       <- ZIO.foreachParN_(8)(filteredTracksWithDtos) { case (t, dto) =>
-                                  (for {
-                                    downloadResult <- downloadTrack(t.mp3Url)
-                                    _ <- downloadResult match {
-                                      case TrackDownloadResult.Success(bytes) =>
-                                          processTrack(dto, bytes) *>
-                                          filter.done(dto)
-                                      case TrackDownloadResult.Failure =>
-                                          filter.done(dto)
-                                      case TrackDownloadResult.Skipped =>
-                                          filter.done(dto)
-                                    }
-                                  } yield ()).whenM(filter.checkBeforeProcessing(dto))
-                                }
+      page    <- getTracklistWebPage(feed, dateFrom, dateTo, pageNum).tapError(e => outSummary.fail(e))
+      _       <- outSummary.succeed(PageSummary(page.trackIds.length, page.pager))
+      bucket  <- inBucket.await
+      _       <- processBrokenTracksIfAny(page, feed, dateFrom, dateTo, pageNum, bucket)
+      tracks  <- if (page.trackIds.nonEmpty) getServiceData(page.trackIds, feed.name) else ZIO.succeed(List())
+      msgs    =  tracks.map(st => TrackMsg(st.toTrackDto, bucket))
+      _       <- queue.offerAll(msgs)
     } yield ()
+  }
+
+  private def processBrokenTracksIfAny(
+    page : TraxsourcePage, feed : Feed, dateFrom : LocalDate, dateTo : LocalDate, pageNum : Int, bucket : BucketRef) =
+  {
+    if (page.brokenTracks > 0) {
+      for {
+        _         <- ZIO.foreach_(0 until page.brokenTracks)(_ => ConsoleProgress.failOne(bucket))
+        url       =  buildPageUri(traxsourceHost, feed.urlTemplate, dateFrom, dateTo, pageNum)
+        logString =  s"Broken tracks detected on $url"
+        _         <- log.warn(logString)
+      } yield ()
+    } else ZIO.succeed()
   }
 
   private def getTracklistWebPage(

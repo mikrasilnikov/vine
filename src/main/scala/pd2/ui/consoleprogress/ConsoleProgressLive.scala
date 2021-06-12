@@ -70,7 +70,7 @@ final case class ConsoleProgressLive(
             val oldBucket = bars(i).buckets(j)
             val newBucket =
               if (completed) oldBucket.copy(completed = oldBucket.completed + 1)
-              else oldBucket.copy(failed = oldBucket.completed + 1)
+              else oldBucket.copy(failed = oldBucket.failed + 1)
             val updatedBuckets = bars(i).buckets.updated(j, newBucket)
             ((), bars.updated(i, bars(i).copy(buckets = updatedBuckets)))
         }
@@ -102,15 +102,16 @@ final case class ConsoleProgressLive(
 
   private def drawProgressBar(bar: BucketProgressBar): ZIO[Any, IOException, Unit] = {
     for {
+      //_ <- ZIO.succeed(println(s"\n${bar.buckets.map(b => (b.size, b.completed, b.failed))}"))
       render  <- ZIO.succeed(BucketProgressBar.render(bar))
       _       <-  if (!runningInsideIntellij) {
-                  console.putStr(ansi().eraseLine().toString) *>
-                  console.putStr(render) *>
-                  console.putStr(ansi().cursorDown(1).toString) *>
-                  console.putStr(ansi().cursorToColumn(1).toString)
-      } else
-        console.putStr("\b" * 100) *>
-        console.putStr(render)
+                    console.putStr(ansi().eraseLine().toString) *>
+                    console.putStr(render) *>
+                    console.putStr(ansi().cursorDown(1).toString) *>
+                    console.putStr(ansi().cursorToColumn(1).toString)
+                  } else
+                    console.putStr("\b" * 100) *>
+                    console.putStr(render)
     } yield ()
   }
 }

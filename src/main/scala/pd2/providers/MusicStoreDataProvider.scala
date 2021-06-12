@@ -1,21 +1,26 @@
 package pd2.providers
 
+import pd2.Application.TrackMsg
 import pd2.config.Config
 import pd2.config.ConfigDescription.Feed
 import pd2.conlimiter.ConnectionsLimiter
-import pd2.providers.Exceptions.{BadContentLength, InternalConfigurationError, ServiceUnavailable}
-import pd2.providers.filters.{FilterEnv, TrackFilter}
+import pd2.providers.Exceptions._
+import pd2.providers.filters._
 import sttp.client3
+import sttp.client3._
 import sttp.client3.httpclient.zio.SttpClient
-import sttp.client3.{Empty, RequestT, asByteArray, asString, basicRequest}
-import sttp.model.{HeaderNames, Uri}
+import sttp.model._
 import zio._
 import zio.clock.Clock
 import zio.duration.durationInt
 import pd2.helpers.Conversions._
 import pd2.ui.consoleprogress.ConsoleProgress
+import pd2.ui.consoleprogress.ConsoleProgress.BucketRef
 import zio.logging._
+
 import java.time.LocalDate
+
+final case class PageSummary(tracksCount : Int, pagerOpt : Option[Pager])
 
 trait MusicStoreDataProvider {
 
@@ -42,39 +47,80 @@ trait MusicStoreDataProvider {
         final case object Skipped extends TrackDownloadResult
     }
 
-    def processTracks[R , E <: Throwable](
+    def processTracks(
       feed          : Feed,
-      date          : LocalDate,
+      dateFrom      : LocalDate,
       dateTo        : LocalDate,
-      filter        : TrackFilter,
-      processTrack  : (TrackDto, Array[Byte]) => ZIO[R, E, Unit])
-    : ZIO[R with FilterEnv with Clock with Logging with ConnectionsLimiter, Throwable, Unit] =
+      queue         : Queue[TrackMsg])
+    : ZIO[Clock with Logging with ConnectionsLimiter with ConsoleProgress, Throwable, Unit] =
      for {
-        pagerPromise    <- Promise.make[Throwable, Option[Pager]]
-        firstPageFiber  <- processTracklistPage(
-                                feed, date, dateTo, 1,
-                                filter, processTrack, Some(pagerPromise))
-                             .fork
-        pager           <- pagerPromise.await
-        remainingPages  =  pager.fold(List[Int]())(_.remainingPages)
-        _               <- ZIO.foreachParN_(8)(remainingPages) { page =>
-                                processTracklistPage(feed, date, dateTo, page,
-                                filter, processTrack, None)
-                            }
-        _               <- firstPageFiber.join
-        _               <- consoleProgress.completeBar(feed.name)
+        firstSummaryP   <- Promise.make[Throwable, PageSummary]
+        firstBucketP    <- Promise.make[Throwable, BucketRef]
+
+        firstFiber      <- processTracklistPage(feed, dateFrom, dateTo, 1, queue, firstBucketP, firstSummaryP).fork
+        firstSummary    <- firstSummaryP.await
+
+        _ <- firstSummary match {
+
+                    case PageSummary(count, None) => for
+                    {
+                        buckets <- ConsoleProgress.initializeBar(feed.name, List(count))
+                        _       <- firstBucketP.succeed(buckets.head)
+                    } yield ()
+
+                    case PageSummary(count, Some(Pager(_, last))) => for
+                    {
+                        lastSummaryP    <- Promise.make[Throwable, PageSummary]
+                        lastBucketP     <- Promise.make[Throwable, BucketRef]
+
+                        lastFiber   <- processTracklistPage(feed, dateFrom, dateTo, last, queue, lastBucketP, lastSummaryP).fork
+                        lastSummary <- lastSummaryP.await
+                        _           <- ZIO.die(new Exception(s"Got empty page ${feed.name}[$last]. Beatport 10K bug?"))
+                                        .when(lastSummary.tracksCount == 0)
+
+                        bucketSizes =  (1 until last).map(_ => count) :+ lastSummary.tracksCount
+                        buckets     <- ConsoleProgress.initializeBar(feed.name, bucketSizes.toList).map(_.toVector)
+
+                        _           <- firstBucketP.succeed(buckets.head)
+                        _           <- lastBucketP.succeed(buckets.last)
+
+                        remainingPg =  (2 until last).toList
+                        _           <- ZIO.foreachParN_(8)(remainingPg)(pg =>
+                                        processTracklistPage(feed, dateFrom, dateTo, pg, queue, buckets(pg-1)))
+
+                        _           <- lastFiber.join
+                    } yield ()
+                }
+
+        _   <- firstFiber.join
+        _   <- ZIO.sleep(1.second).repeatUntilM(_ => queue.size.map(_ <= 0))
+        _   <- queue.shutdown
      } yield ()
 
-
-    def processTracklistPage[R, E <: Throwable](
+    def processTracklistPage(
       feed             : Feed,
       dateFrom         : LocalDate,
       dateTo           : LocalDate,
       pageNum          : Int,
-      filter           : TrackFilter,
-      processTrack     : (TrackDto, Array[Byte]) => ZIO[R, E, Unit],
-      pagePromiseOption: Option[Promise[Throwable, Option[Pager]]])
-    : ZIO[R with FilterEnv with Clock with Logging with ConnectionsLimiter, Throwable, Unit]
+      queue            : Queue[TrackMsg],
+      bucketRef        : BucketRef
+    ): ZIO[Clock with Logging with ConnectionsLimiter with ConsoleProgress, Throwable, Unit] =
+    for {
+        bucketP     <- Promise.make[Throwable, BucketRef]
+        summaryP    <- Promise.make[Throwable, PageSummary]
+        _           <- bucketP.succeed(bucketRef)
+        _           <- processTracklistPage(feed, dateFrom, dateTo, pageNum, queue, bucketP, summaryP)
+    } yield ()
+
+    def processTracklistPage(
+      feed             : Feed,
+      dateFrom         : LocalDate,
+      dateTo           : LocalDate,
+      pageNum          : Int,
+      queue            : Queue[TrackMsg],
+      inBucket         : Promise[Throwable, BucketRef],
+      outSummary       : Promise[Throwable, PageSummary])
+    : ZIO[Clock with Logging with ConnectionsLimiter with ConsoleProgress, Throwable, Unit]
 
     private[providers] def buildPageUri(
       host        : String,
@@ -119,25 +165,10 @@ trait MusicStoreDataProvider {
             schedule        =  Schedule.recurs(10) && Schedule.spaced(5.seconds)
             resp            <- ConnectionsLimiter.withPermit(uri) {
                                     log.trace(s"$uri") *>
-                                    send(req).tapError { e =>
-                                        log.warn(s"Retrying\n$uri\n(failed with ${e.toString})")
-                                    }
+                                    send(req).tapError { e => log.warn(s"Retrying\n$uri\n(failed with ${e.toString})") }
                                 }
                                 .retry(schedule)
                                 .tapError(e => log.warn(s"Could not download $uri, error: $e"))
         } yield resp
-    }
-
-    protected def downloadTrack(trackUri: Uri)
-    : ZIO[Clock with Logging with Config with ConnectionsLimiter, Throwable, TrackDownloadResult] = {
-        for {
-            downloadTrack   <- Config.downloadTracks
-            result          <- if (downloadTrack)
-                                    download(trackUri)
-                                        .map(TrackDownloadResult.Success(_))
-                                        .orElseSucceed(TrackDownloadResult.Failure)
-                               else ZIO.succeed(TrackDownloadResult.Skipped)
-        } yield result
-
     }
 }

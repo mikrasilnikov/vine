@@ -25,7 +25,7 @@ case class BeatportPageTrack(
   releaseDate : LocalDate,
   label       : String,
   duration    : Option[Duration],
-  previewUrl  : Uri,
+  previewUrl  : String,
   key         : Option[String]
 ) {
   def toTrackDto(feed : String) : TrackDto = TrackDto(
@@ -36,7 +36,8 @@ case class BeatportPageTrack(
     releaseDate,
     duration.fold(Duration.ZERO)(identity),
     feed,
-    id)
+    id,
+    previewUrl)
 }
 
 case class BeatportPage(pager : Option[Pager], tracks : List[BeatportPageTrack]) {
@@ -104,7 +105,6 @@ object BeatportPage {
     }
   }
 
-  import pd2.providers.traxsource.TraxsourceServiceTrack.uriDecoder
   implicit val beatportTrackDecoder : Decoder[BeatportPageTrack] = new Decoder[BeatportPageTrack] {
     override def apply(c: HCursor) : Decoder.Result[BeatportPageTrack] =
       for {
@@ -118,7 +118,7 @@ object BeatportPage {
         label       <- c.downField("label").downField("name").as[String]
         duration    <- c.downField("duration").downField("milliseconds").as[Option[Int]]
                         .map(mso => mso.map(ms => Duration.ofMillis(ms)))
-        previewUrl  <- c.downField("preview").downField("mp3").downField("url").as[Uri]
+        previewUrl  <- c.downField("preview").downField("mp3").downField("url").as[String]
         key         <- c.downField("key").as[Option[String]]
       } yield BeatportPageTrack(id, artists, title, name, mix, release, releaseDate, label, duration, previewUrl, key)
   }

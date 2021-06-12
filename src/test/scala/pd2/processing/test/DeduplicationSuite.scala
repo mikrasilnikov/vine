@@ -4,15 +4,13 @@ import pd2.config.test.ConfigMock
 import pd2.data.DatabaseService
 import pd2.data.test._
 import pd2.processing.Deduplication._
-import pd2.processing.test.DeduplicationSuite.testM
 import pd2.providers.TrackDto
 import zio._
 import zio.test._
 import zio.test.Assertion._
 import zio.logging.slf4j.Slf4jLogger
 import zio.test.mock.Expectation.value
-
-import java.time.{Duration, LocalDate, LocalDateTime}
+import java.time._
 
 object DeduplicationSuite extends DefaultRunnableSpec {
 
@@ -31,7 +29,8 @@ object DeduplicationSuite extends DefaultRunnableSpec {
           LocalDate.parse("2003-05-26"),
           Duration.ofMinutes(5),
           "03-traxsource-house-featured",
-          12345)
+          12345,
+          "http://static.traxsource.com/qwerty.mp3")
 
         val expectedDbTrack = trackDto.toDbTrack(Some(currentRunId)).get.copy(id = 1)
 
@@ -68,7 +67,8 @@ object DeduplicationSuite extends DefaultRunnableSpec {
           LocalDate.parse("2003-05-26"),
           Duration.ofMinutes(5),
           "03-traxsource-house-featured",
-          12345)
+          12345,
+          "http://static.traxsource.com/qwerty.mp3")
 
         val configMock = ConfigMock.RunId(value(LocalDateTime.now()))
 
@@ -108,7 +108,8 @@ object DeduplicationSuite extends DefaultRunnableSpec {
           LocalDate.parse("2003-05-26"),
           Duration.ofMinutes(5),
           "03-traxsource-house-featured",
-          12345)
+          12345,
+          "http://static.traxsource.com/qwerty.mp3")
 
         val configMock = ConfigMock.RunId(value(currentRunId))
 
@@ -149,7 +150,8 @@ object DeduplicationSuite extends DefaultRunnableSpec {
           LocalDate.parse("2003-05-26"),
           Duration.ofMinutes(5),
           "03-traxsource-house-featured",
-          12345)
+          12345,
+          "http://static.traxsource.com/qwerty.mp3")
 
         val configMock = ConfigMock.RunId(value(currentRunId))
 

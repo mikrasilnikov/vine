@@ -33,7 +33,8 @@ object MyFilterSuite extends DefaultRunnableSpec {
           LocalDate.parse("2003-05-26"),
           Duration.ofMinutes(5),
           "03-traxsource-house-featured",
-          12345)
+          12345,
+          "http://static.traxsource.com/qwerty.mp3")
 
         val test = for {
           actual    <- pd2.providers.filters.my.check(trackDto)
@@ -56,7 +57,8 @@ object MyFilterSuite extends DefaultRunnableSpec {
           LocalDate.parse("2003-05-26"),
           Duration.ofMinutes(5),
           "03-traxsource-house-featured",
-          12345)
+          12345,
+          "http://static.traxsource.com/qwerty.mp3")
 
         val test = for {
           actual    <- pd2.providers.filters.my.check(trackDto)
@@ -79,7 +81,8 @@ object MyFilterSuite extends DefaultRunnableSpec {
           LocalDate.parse("2003-05-26"),
           Duration.ofMinutes(5),
           "03-traxsource-house-featured",
-          12345)
+          12345,
+          "http://static.traxsource.com/qwerty.mp3")
 
         val test = for {
           actual    <- pd2.providers.filters.my.check(trackDto)
@@ -102,7 +105,8 @@ object MyFilterSuite extends DefaultRunnableSpec {
           LocalDate.parse("2003-05-26"),
           Duration.ofMinutes(5),
           "03-traxsource-house-featured",
-          12345)
+          12345,
+          "http://static.traxsource.com/qwerty.mp3")
 
         val test = for {
           actual    <- pd2.providers.filters.my.check(trackDto)
@@ -126,7 +130,8 @@ object MyFilterSuite extends DefaultRunnableSpec {
           LocalDate.parse("2003-05-26"),
           Duration.ofMinutes(5),
           "03-traxsource-house-featured",
-          12345)
+          12345,
+          "http://static.traxsource.com/qwerty.mp3")
 
         val test = for {
           actual    <- pd2.providers.filters.my.check(trackDto)
@@ -150,7 +155,8 @@ object MyFilterSuite extends DefaultRunnableSpec {
           LocalDate.parse("2003-05-26"),
           Duration.ofMinutes(5),
           "03-traxsource-house-featured",
-          12345)
+          12345,
+          "http://static.traxsource.com/qwerty.mp3")
 
         val test = for {
           actual    <- pd2.providers.filters.my.check(trackDto)
@@ -174,7 +180,8 @@ object MyFilterSuite extends DefaultRunnableSpec {
           LocalDate.parse("2003-05-26"),
           Duration.ofMinutes(5),
           "03-traxsource-house-featured",
-          12345)
+          12345,
+          "http://static.traxsource.com/qwerty.mp3")
 
         val test = for {
           actual    <- pd2.providers.filters.my.check(trackDto)
@@ -198,7 +205,8 @@ object MyFilterSuite extends DefaultRunnableSpec {
           LocalDate.parse("2003-05-26"),
           Duration.ofMinutes(5),
           "03-traxsource-house-featured",
-          12345)
+          12345,
+          "http://static.traxsource.com/qwerty.mp3")
 
         val test = for {
           actual    <- pd2.providers.filters.my.check(trackDto)

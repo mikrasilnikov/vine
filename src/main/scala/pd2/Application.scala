@@ -1,39 +1,47 @@
 package pd2
+
 import ch.qos.logback.classic.LoggerContext
 import ch.qos.logback.classic.joran.JoranConfigurator
+import org.fusesource.jansi.AnsiConsole
 import org.slf4j.LoggerFactory
 import pd2.config.Config
-import pd2.config.ConfigDescription.{Feed, FeedTag, FilterTag}
-import pd2.data.{Backend, DatabaseService}
-import pd2.providers.{TrackDto, filters, getProviderByFeedTag}
+import pd2.config.ConfigDescription.Feed
+import pd2.conlimiter.{ConnectionsLimiter, ConnectionsLimiterLive}
+import pd2.data.{Backend, DatabaseService, Pd2Database}
+import pd2.processing.Deduplication._
+import pd2.processing.{Deduplication, Saving}
 import pd2.providers.beatport.{Beatport, BeatportLive}
+import pd2.providers.filters.{TrackFilter, getFilterByTag}
 import pd2.providers.traxsource.{Traxsource, TraxsourceLive}
+import pd2.providers.{TrackDto, filters, getProviderByFeedTag}
+import pd2.ui.ProgressBarDimensions
+import pd2.ui.consoleprogress.ConsoleProgress.BucketRef
 import pd2.ui.consoleprogress.{ConsoleProgress, ConsoleProgressLive}
 import slick.jdbc.SQLiteProfile
+import sttp.client3.httpclient.zio.SttpClient
+import sttp.model.Uri
+import zio._
 import zio.blocking.Blocking
-import zio.console.{Console, putStr, putStrLn}
+import zio.clock.Clock
+import zio.console.{Console, putStrLn}
 import zio.duration.durationInt
+import zio.logging._
+import zio.logging.slf4j.Slf4jLogger
 import zio.nio.core.file.Path
 import zio.nio.file.Files
 import zio.system.System
-import pd2.providers.filters.FilterEnv
-import zio.clock.Clock
-import zio.{Chunk, ExitCode, Has, Ref, Schedule, URIO, ZIO, ZLayer, clock}
-import zio.logging._
-import zio.logging.slf4j.Slf4jLogger
+
 import java.time.format.DateTimeFormatter
 import java.time.{LocalDate, LocalDateTime}
 import scala.util.Try
-import org.fusesource.jansi.AnsiConsole
-import pd2.conlimiter.{ConnectionsLimiter, ConnectionsLimiterLive}
-import pd2.ui.ProgressBarDimensions
 
 object Application extends zio.App {
 
-  def run(args: List[String]): URIO[zio.ZEnv, ExitCode] = {
+  final case class TrackMsg(dto: TrackDto, bucketRef: BucketRef)
 
+  def run(args: List[String]): URIO[zio.ZEnv, ExitCode] =
+  {
     AnsiConsole.systemInstall()
-
     configureLogging()
 
     val periodOption = for {
@@ -47,13 +55,14 @@ object Application extends zio.App {
       maxConn     <- getParam(args, "--maxConnections", _.toInt,     default = Some(16))
       download    <- getParam(args, "--downloadTracks", _.toBoolean, default = Some(true))
     } yield makeEnvironment(
-      maxConnections = maxConn,
-      barDimensions = ProgressBarDimensions(27, 65),
-      configFilePath = configPath,
-      dbFilePath  = dbPath,
-      dateFrom = from,
-      dateTo = to,
-      downloadTracks = download)
+      hostConnections = 8,
+      maxConnections  = maxConn,
+      barDimensions   = ProgressBarDimensions(27, 65),
+      configFilePath  = configPath,
+      dbFilePath      = dbPath,
+      dateFrom        = from,
+      dateTo          = to,
+      downloadTracks  = download)
 
     val effect = for {
       _             <- log.info("Application starting...")
@@ -61,39 +70,12 @@ object Application extends zio.App {
       _             <- Files.createDirectory(previewsBase).whenM(Files.notExists(previewsBase))
 
       progressFiber <- ConsoleProgress.drawProgress.repeat(Schedule.fixed(500.millis)).forever.fork
-      processedRef  <- Ref.make(List[TrackDto]())
 
       feeds         <- Config.configDescription.map(_.feeds)
-      _             <- ZIO.foreach_(feeds) { feed =>
-                        val feedTargetPath = previewsBase / Path(feed.name)
-                        Files.createDirectory(feedTargetPath).whenM(Files.notExists(feedTargetPath))
-                      }
+      _             <- processFeeds(feeds)
 
-      feedsByPriority= feeds.groupBy(_.priority).toList.sortBy { case (p, _) => p }
-
-      // Сначала регистрируем фиды, остортированные по приоритету в ConsoleProgress (запрашивая 0 Item-ов для каждого)
-      sortedFeeds    = feedsByPriority.flatMap { case (_, value) => value }
-      _             <- ZIO.foreach_(sortedFeeds)(f => ConsoleProgress.initializeBar(f.name, List()))
-
-      // Обрабатываем фиды по приоритетам
-      _             <- ZIO.foreach_(feedsByPriority) { case (_, items) =>
-                        ZIO.foreachPar_(items)(f => processFeed(f, processedRef).tapError(e => putStrLn(e.toString)))
-                      }
-
-      _             <- clock.sleep(500.millis) *> progressFiber.interrupt
-      processed     <- processedRef.get
-
-      _             <- putStrLn(s"\ntotal tracks: ${processed.length}")
+      _             <- clock.sleep(1000.millis) *> progressFiber.interrupt
     } yield ()
-
-    def logErrors[R,E,A](effect : ZIO[R,E,A]): ZIO[Blocking with Config with R, Any, A] = effect
-      .tapCause(e => for {
-        now       <- ZIO.effectTotal(LocalDateTime.now())
-        appPath   <- Config.appPath
-        fileName  =  s"error-${now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"))}.txt"
-                      .replaceAll(":", "")
-        _         <- Files.writeLines(appPath / Path(fileName), List(e.prettyPrint))
-      } yield ())
 
     environmentOption match {
       case None => printUsage.exitCode
@@ -101,6 +83,77 @@ object Application extends zio.App {
         .catchAll(e => putStrLn(e.toString)).exitCode
     }
   }
+
+  private def processFeeds(feeds : List[Feed]) =
+  {
+    val feedsByPriority = feeds.groupBy(_.priority).toList.sortBy { case (p, _) => p }
+    val sortedFeeds = feedsByPriority.flatMap { case (_, group) => group }
+
+    for {
+      _ <- ZIO.foreach_(sortedFeeds)(f => ConsoleProgress.initializeBar(f.name, List(1)))
+      _ <- ZIO.foreach_(feedsByPriority) { case (_, group) => ZIO.foreachPar_(group)(processFeed) }
+      } yield ()
+  }
+
+  def processFeed(feed : Feed) = {
+    for {
+      folderSem   <- Semaphore.make(1)
+      feedPath    <- Config.previewsBasePath.map(_ / Path(feed.name))
+
+      (from, to)  <- Config.dateFrom <*> Config.dateTo
+      workerNum   <- Config.connectionsPerHost
+      provider    <- getProviderByFeedTag(feed.tag)
+      queue       <- Queue.bounded[TrackMsg](1000)
+      filter      =  feed.filterTags.map(getFilterByTag).foldLeft(filters.withArtistAndTitle)(_ ++ _)
+
+      workersFib  <- ZIO.forkAll(List.fill(workerNum)(worker(queue, filter, feedPath, folderSem)))
+      _           <- provider.processTracks(feed, from, to, queue)
+      _           <- workersFib.join.foldCause(_ => (), _ => ())
+    } yield ()
+  }
+
+  def worker(
+    queue : Queue[TrackMsg],
+    filter : TrackFilter,
+    targetPath : Path,
+    folderSem : Semaphore) =
+  {
+    def deduplicateOrDownload(msg : TrackMsg) = for
+    {
+      dResult <- Deduplication.deduplicateOrEnqueue(msg.dto)
+
+      download=  ZIO.effect(Uri.unsafeParse(msg.dto.mp3Url))
+                  .flatMap(uri => Saving.downloadWithRetry(uri, targetPath, folderSem)
+                    .whenM(Config.downloadTracks))
+      _       <- dResult match {
+                    case Duplicate(_)   => ZIO.succeed()
+                    case InProcess(_)   => ZIO.succeed()
+                    case Enqueued(_)    => download
+                    case Resumed(_, _)  => download
+                  }
+      _       <- Deduplication.markAsCompleted(dResult)
+    } yield ()
+
+    val process1 = for {
+      msg <- queue.take
+      _ <- deduplicateOrDownload(msg).whenM(filter.check(msg.dto))
+            .foldCauseM( // Report error to user, continue processing
+              c =>  log.error(s"Download failed\nUrl: ${msg.dto.mp3Url}\n${c.prettyPrint}") *>
+                    ConsoleProgress.failOne(msg.bucketRef),
+              _ =>  ConsoleProgress.completeOne(msg.bucketRef))
+    } yield ()
+
+    process1.forever
+  }
+
+  def logErrors[R,E,A](effect : ZIO[R,E,A]): ZIO[Blocking with Config with R, Any, A] = effect
+    .tapCause(e => for {
+      now       <- ZIO.effectTotal(LocalDateTime.now())
+      appPath   <- Config.appPath
+      fileName  =  s"error-${now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"))}.txt"
+        .replaceAll(":", "")
+      _         <- Files.writeLines(appPath / Path(fileName), List(e.prettyPrint))
+    } yield ())
 
   def printUsage : ZIO[Console, Throwable, Unit] = for {
     _ <- putStrLn("Examples:")
@@ -141,37 +194,6 @@ object Application extends zio.App {
     parseResult.orElse(default)
   }
 
-  def processFeed(feed : Feed, refDtos : Ref[List[TrackDto]])
-  : ZIO[
-    Traxsource with Beatport with FilterEnv with Blocking with ConsoleProgress with Clock with Logging with ConnectionsLimiter,
-    Throwable, Unit] =
-    for {
-      feedFilter  <- ZIO.succeed(feed.filterTags
-                      .map(filters.getFilterByTag)
-                      .foldLeft(filters.withArtistAndTitle)(_ ++ _))
-      dateFrom    <- Config.dateFrom
-      dateTo      <- Config.dateTo
-      musicStore  <- getProviderByFeedTag(feed.tag)
-      _           <- musicStore.processTracks(feed, dateFrom, dateTo, feedFilter,
-                      (dto, data) => processTrack(dto, data, refDtos))
-    } yield ()
-
-  def processTrack(dto: TrackDto, data: Array[Byte], refDtos : Ref[List[TrackDto]])
-  : ZIO[Blocking with Config with Logging, Throwable, Unit] =
-  {
-    def fixPath(s : String) : String =
-      s.replaceAll("([<>:\"/\\\\|?*])", "_")
-
-    for {
-      _             <- dto.uniqueNameZio.flatMap(name => log.trace(s"Processing track $name"))
-      previewsBase  <- Config.previewsBasePath
-      feedPath      =  previewsBase / Path(dto.feed)
-      fileName      =  makeFileName(dto)
-      _             <- Files.writeBytes(feedPath / Path(fixPath(fileName)), Chunk.fromArray(data))
-      _             <- refDtos.update(dto :: _)
-    } yield ()
-  }
-
   def makeFileName(dto : TrackDto): String = {
     val durationStr = f"${dto.duration.toSeconds / 60}%02d:${dto.duration.toSeconds % 60}%02d"
     val withoutExt = s"[${dto.label}] [${dto.releaseName}] - ${dto.artist} - ${dto.title} - [$durationStr]"
@@ -180,6 +202,7 @@ object Application extends zio.App {
   }
 
   def makeEnvironment(
+    hostConnections : Int,
     maxConnections  : Int,
     barDimensions   : ProgressBarDimensions,
     configFilePath  : Path,
@@ -188,24 +211,25 @@ object Application extends zio.App {
     dateTo          : LocalDate,
     downloadTracks  : Boolean)
   : ZLayer[
-    Console with Blocking,
-    Throwable,
-    Traxsource with Beatport with ConsoleProgress with Config with Has[DatabaseService] with Logging with ConnectionsLimiter] =
+    Console with Blocking, Throwable,
+      Traxsource with
+      Beatport with
+      ConsoleProgress with
+      Config with
+      Pd2Database with
+      Logging with
+      ConnectionsLimiter with
+      SttpClient] =
   {
     import sttp.client3.httpclient.zio.HttpClientZioBackend
 
-    val configLayer = Config.makeLayer(configFilePath, dateFrom, dateTo, maxConnections, downloadTracks)
+    val config = Config.makeLayer(configFilePath, dateFrom, dateTo, hostConnections, maxConnections, downloadTracks)
+    val conLimiter = ConnectionsLimiterLive.makeLayer(maxConnections, hostConnections)
+    val progress = (System.live ++ Console.live) >>> ConsoleProgressLive.makeLayer(barDimensions)
+    val sttpClient = HttpClientZioBackend.layer()
 
-    val connectionsLimiter = ConnectionsLimiterLive.makeLayer(maxConnections, perHostLimit = 8)
-
-    val consoleProgress = (System.live ++ Console.live) >>>
-      ConsoleProgressLive.makeLayer(barDimensions)
-
-    val traxsourceLive = configLayer ++
-      (consoleProgress ++ HttpClientZioBackend.layer()) >>> TraxsourceLive.makeLayer
-
-    val beatportLive = configLayer ++
-      (consoleProgress ++ HttpClientZioBackend.layer()) >>> BeatportLive.makeLayer
+    val traxsource  = config ++ progress ++ sttpClient >>> TraxsourceLive.makeLayer
+    val beatport    = config ++ progress ++ sttpClient >>> BeatportLive.makeLayer
 
     val database =
       Backend.makeLayer(SQLiteProfile, Backend.makeSqliteLiveConfig(dbFilePath)) >>>
@@ -213,7 +237,8 @@ object Application extends zio.App {
 
     val logging = Slf4jLogger.make ((_, message) => message)
 
-    traxsourceLive ++ beatportLive ++ consoleProgress ++ configLayer ++ database ++ logging ++ connectionsLimiter
+    traxsource ++ beatport ++ progress ++ config ++
+      database ++ logging ++ conLimiter ++ sttpClient
   }
 
   def configureLogging(): Unit = {

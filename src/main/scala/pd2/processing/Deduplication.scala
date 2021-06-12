@@ -94,12 +94,9 @@ object Deduplication {
         val needsLogging = t.artist != dto.artist || t.title != dto.title
         log.info(s"Track deduplicated.\n\tNew: ${dto.artist} - ${dto.title}\n\tOld: ${t.artist} - ${t.title}")
           .when(needsLogging)
-          .as(false)
       case InProcess(_) => ZIO.succeed()
       case Resumed(_, on) =>
-        log.info(
-          s"Restarting failed download: ${dto.artist} - ${dto.title}. Failed on $on (current:$currentRunId)")
-          .as(true)
+        log.info(s"Restarting failed download: ${dto.artist} - ${dto.title}. Failed on $on (current:$currentRunId)")
     }
   }
 }

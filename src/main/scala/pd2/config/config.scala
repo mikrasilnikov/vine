@@ -9,7 +9,8 @@ import io.circe.parser._
 import pd2.config.ConfigDescription.{Feed, FeedTag, FilterTag}
 import pd2.helpers.Conversions.EitherToZio
 import zio.console.{Console, putStr, putStrLn}
-import java.io.File
+
+import java.io.{File, IOException}
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files => JFiles, Path => JPath}
 import java.time.{LocalDate, LocalDateTime}
@@ -37,6 +38,7 @@ package object config {
        *  on a paticular fiber it's "Queued" column value is updated with current runId.
        *  */
       def runId               : LocalDateTime
+      def connectionsPerHost  : Int
       def globalConnSemaphore : Semaphore
       def appPath             : Path
       def downloadTracks      : Boolean
@@ -52,6 +54,7 @@ package object config {
       filePath                : Path,
       from                    : LocalDate,
       to                      : LocalDate,
+      perHostConnectionsLimit : Int,
       globalConnectionsLimit  : Int,
       doDownloadTracks        : Boolean)
     : ZLayer[Console with Blocking, Throwable, Config] = {
@@ -67,15 +70,13 @@ package object config {
         json        <- parse(jsonString).toZio.mapError(s => new Exception(s))
         description <- json.as[ConfigDescription].toZio
 
-        artistsRegxp<- Files.readAllLines(jarPath / description.my.artistsFile)
-                        .map(list => list.map(name => buildArtistRegex(name)))
-        labels      <- Files.readAllLines(jarPath / description.my.labelsFile)
-                        .map(list => list.map(_.trim.toLowerCase))
-        _           <- putStr(s"Loaded ${artistsRegxp.length} watched artists and ${labels.length} watched labels. ")
+        artistsRegxp<- loadLines(jarPath / description.my.artistsFile).map(list => list.map(buildArtistRegex))
+        labels      <- loadLines(jarPath / description.my.labelsFile)
+        shit        <- loadLines(description.noShit.dataFiles.map(jarPath / _))
 
-        shit        <-  ZIO.foldLeft(description.noShit.dataFiles)(List[String]())(
-                          (list, fName) => Files.readAllLines(jarPath / Path(fName)).map(list ++ _))
+        _           <- putStr(s"Loaded ${artistsRegxp.length} watched artists and ${labels.length} watched labels. ")
         _           <- putStrLn(s"Loaded ${shit.length} ignored labels.")
+
         localDt     <- ZIO.succeed(LocalDateTime.now().withNano(0))
         _           <- ensureCorrectDateRangeIsUsedWithTraxsourceFeeds(description.feeds, from, localDt.toLocalDate)
         gSemaphore  <- Semaphore.make(globalConnectionsLimit)
@@ -93,6 +94,7 @@ package object config {
         val previewsBasePath: Path = jarPath / Path(targetFolder)
         val runId : LocalDateTime = localDt
         val globalConnSemaphore : Semaphore = gSemaphore
+        val connectionsPerHost : Int = perHostConnectionsLimit
         val appPath : Path = jarPath
         val downloadTracks : Boolean = doDownloadTracks
       }
@@ -100,11 +102,16 @@ package object config {
       make.toLayer
     }
 
-    def buildArtistRegex(name : String) : Regex =
-      ("(\\W|^)" + Regex.quote(name.trim.toLowerCase) + "(\\W|$)").r
+    private def loadLines(paths : List[Path]) : ZIO[Blocking, IOException, List[String]] = for {
+      lines <- ZIO.foldLeft(paths)(List[String]())((list, path) => Files.readAllLines(path).map(list ++ _))
+    } yield lines.map(_.trim.toLowerCase)
+
+    private def loadLines(path : Path): ZIO[Blocking, IOException, List[String]] = loadLines(List(path))
+
+    def buildArtistRegex(name : String) : Regex = ("(\\W|^)" + Regex.quote(name.trim.toLowerCase) + "(\\W|$)").r
 
     /** Traxsource "Just Added" and "DJ Top 10s" sections do not work on dates earlier then 180 days prior to today. */
-    def ensureCorrectDateRangeIsUsedWithTraxsourceFeeds(
+    private def ensureCorrectDateRangeIsUsedWithTraxsourceFeeds(
       feeds : List[Feed], dateFrom : LocalDate, currentDate : LocalDate)
     : Task[Unit] =
     {

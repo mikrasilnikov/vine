@@ -9,7 +9,7 @@ import pd2.providers.Exceptions._
 import scala.util.{Failure, Success, Try}
 
 
-final case class TraxsourcePage(pager: Option[Pager], trackIds: List[Int]) {
+final case class TraxsourcePage(pager: Option[Pager], trackIds: List[Int], brokenTracks : Int) {
   val remainingPages: List[Int] = pager.fold(Nil:List[Int])(_.remainingPages)
 }
 
@@ -49,11 +49,13 @@ object TraxsourcePage {
 
     pagerEither.map { pager =>
       val tracklistDiv = doc >> elements("div.play-trk") >> attrs("data-trid")
+
       val trackIds = tracklistDiv
         .filter(_.nonEmpty) // Бывают страницы, на которых есть битый элемент в списке, с пустым атрибутом
         .map(_.toInt)
         .toList
-      TraxsourcePage(pager, trackIds)
+      val brokenCount = tracklistDiv.count(_.isEmpty)
+      TraxsourcePage(pager, trackIds, brokenCount)
     }
   }
 }

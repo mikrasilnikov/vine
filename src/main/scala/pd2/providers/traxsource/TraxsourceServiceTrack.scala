@@ -23,15 +23,15 @@ final case class TraxsourceServiceTrack(
   catNumber   : String,
   duration    : Duration,
   releaseDate : LocalDate,
-  imageUrl    : Uri,
-  mp3Url      : Uri,
+  imageUrl    : String,
+  mp3Url      : String,
   keySig      : String
 ) {
   // If artist.order > 1 then it's a remixer.
   val artist  : String      = artists.filter(_.order == 1).map(_.name).mkString(", ")
   val releaseName : String  = titleUrl.split('/').last.replaceAll("-", " ")
   def toTrackDto : TrackDto =
-    TrackDto(artists.map(_.name).mkString(", "), title, label.name, releaseName, releaseDate, duration, feed, trackId)
+    TrackDto(artists.map(_.name).mkString(", "), title, label.name, releaseName, releaseDate, duration, feed, trackId, mp3Url)
 }
 
 object TraxsourceServiceTrack {
@@ -89,12 +89,6 @@ object TraxsourceServiceTrack {
       } yield TraxsourceServiceLabel(id, name, webName)
   }
 
-  implicit val uriDecoder : Decoder[Uri] = new Decoder[Uri] {
-    override def apply(c: HCursor): Result[Uri] = for {
-      t <- c.value.as[String]
-    } yield Uri.parse(t).getOrElse(???)
-  }
-
   def traxsourceServiceTrackDecoder(feed : String): Decoder[TraxsourceServiceTrack] = new Decoder[TraxsourceServiceTrack] {
     override def apply(c: HCursor) : Decoder.Result[TraxsourceServiceTrack] =
       for {
@@ -116,8 +110,8 @@ object TraxsourceServiceTrack {
               .sum
           }
         releaseDate     <- c.downField("r_date").as[LocalDate]
-        imageUrl        <- c.downField("image").as[Uri]
-        mp3Url          <- c.downField("mp3").as[Uri]
+        imageUrl        <- c.downField("image").as[String]
+        mp3Url          <- c.downField("mp3").as[String]
         key             <- c.downField("keysig").as[String]
       } yield TraxsourceServiceTrack(feed,
         id, artists, title, titleUrl, trackUrl, label, genre,

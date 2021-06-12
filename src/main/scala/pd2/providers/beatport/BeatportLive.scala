@@ -1,17 +1,18 @@
 package pd2.providers.beatport
 
+import pd2.Application.TrackMsg
 import pd2.config.Config
 import pd2.config.ConfigDescription.Feed
 import pd2.conlimiter.ConnectionsLimiter
 import pd2.helpers.Conversions.EitherToZio
-import pd2.providers.filters.{FilterEnv, TrackFilter}
-import pd2.providers.{Pager, TrackDto}
+import pd2.providers.PageSummary
 import pd2.ui.consoleprogress.ConsoleProgress
+import pd2.ui.consoleprogress.ConsoleProgress.BucketRef
 import sttp.client3.httpclient.zio.SttpClient
-import sttp.model.Uri
 import zio.clock.Clock
 import zio.logging.Logging
-import zio.{Promise, Semaphore, ZIO, ZLayer}
+import zio.{Promise, Queue, ZIO, ZLayer}
+
 import java.nio.charset.StandardCharsets
 import java.time.LocalDate
 
@@ -22,36 +23,21 @@ case class BeatportLive(
 
   val beatportHost = "https://www.beatport.com"
 
-  def processTracklistPage[R, E <: Throwable](
-    feed: Feed,
-    dateFrom: LocalDate,
-    dateTo: LocalDate,
-    pageNum: Int,
-    filter: TrackFilter,
-    processTrack: (TrackDto, Array[Byte]) => ZIO[R, E, Unit],
-    pagePromiseOption: Option[Promise[Throwable, Option[Pager]]])
-  : ZIO[
-    R with FilterEnv with Clock with Logging with ConnectionsLimiter,
-    Throwable, Unit] = {
+  override def processTracklistPage(
+    feed             : Feed,
+    dateFrom         : LocalDate,
+    dateTo           : LocalDate,
+    pageNum          : Int,
+    queue            : Queue[TrackMsg],
+    inBucket         : Promise[Throwable, BucketRef],
+    outSummary       : Promise[Throwable, PageSummary])
+  : ZIO[Clock with Logging with ConnectionsLimiter, Throwable, Unit] = {
     for {
-      page                    <- getTracklistWebPage(feed, dateFrom, dateTo, pageNum)
-                                  .tapError(e => pagePromiseOption.fold(ZIO.succeed())(promise => promise.fail(e).unit))
-      _                       <- pagePromiseOption.fold(ZIO.succeed())(_.succeed(page.pager).unit)
-      filteredTracksWithDtos  <- ZIO.filter(page.tracks.map(st => (st, st.toTrackDto(feed.name)))) { case (_, dto) => filter.check(dto) }
-      _                       <- ZIO.foreachParN_(8)(filteredTracksWithDtos) { case (t, dto) =>
-                                (for {
-                                  downloadResult <- downloadTrack(t.previewUrl)
-                                  _ <- downloadResult match {
-                                      case TrackDownloadResult.Success(bytes) =>
-                                          processTrack(dto, bytes) *>
-                                          filter.done(dto)
-                                      case TrackDownloadResult.Failure =>
-                                          filter.done(dto)
-                                      case TrackDownloadResult.Skipped =>
-                                          filter.done(dto)
-                                  }
-                                } yield ()).whenM(filter.checkBeforeProcessing(dto))
-                              }
+      page    <- getTracklistWebPage(feed, dateFrom, dateTo, pageNum).tapError(e => outSummary.fail(e))
+      _       <- outSummary.succeed(PageSummary(page.tracks.length, page.pager))
+      bucket  <- inBucket.await
+      msgs    =  page.tracks.map(st => TrackMsg(st.toTrackDto(feed.name), bucket))
+      _       <- queue.offerAll(msgs)
     } yield ()
   }
 
