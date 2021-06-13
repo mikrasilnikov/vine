@@ -73,9 +73,9 @@ object Application extends zio.App {
 
       feeds         <- Config.configDescription.map(_.feeds)
       _             <- processFeeds(feeds)
-      _             <- Counters.ensureAllZero
 
       _             <- clock.sleep(1000.millis) *> progressFiber.interrupt
+      _             <- Counters.ensureAllZero
     } yield ()
 
     environmentOption match {
