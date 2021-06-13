@@ -106,7 +106,7 @@ object Application extends zio.App {
       provider    <- getProviderByFeedTag(feed.tag)
       filter      =  feed.filterTags.map(getFilterByTag).foldLeft(filters.withArtistAndTitle)(_ ++ _)
 
-      queue       <- Queue.unbounded[TrackMsg]
+      queue       <- Queue.bounded[TrackMsg](300)
       completionP <- Promise.make[Nothing, Unit]
 
       workers     <- ZIO.forkAll(List.fill(workerNum)(
@@ -115,8 +115,7 @@ object Application extends zio.App {
       _           <- provider.processTracks(feed, from, to, queue, completionP)
 
       _           <- workers.join
-      rem         <- queue.size
-      _           <- log.info(s"feed ${feed.name} completed. $rem messages remaining.")
+      _           <- queue.size.flatMap(rem => log.info(s"feed ${feed.name} completed. $rem messages remaining."))
       _           <- queue.shutdown
     } yield ()
   }
@@ -144,12 +143,13 @@ object Application extends zio.App {
     } yield ()
 
     for {
-      _ <- Counters.modify(s"${msg.dto.feed}_M", -1)
+      //_ <- log.trace(s"got $msg")
+      _ <- Counters.modify(msg.dto.feed, -1)
       _ <- deduplicateOrDownload(msg).whenM(filter.check(msg.dto))
             .foldCauseM( // Report error to user, continue processing
               c =>  log.error(s"Download failed\nUrl: ${msg.dto.mp3Url}\n${c.prettyPrint}") *>
-                    ConsoleProgress.failOne(msg.bucketRef)      *> Counters.modify(s"${msg.dto.feed}_P", -1),
-              _ =>  ConsoleProgress.completeOne(msg.bucketRef)  *> Counters.modify(s"${msg.dto.feed}_P", -1))
+                    ConsoleProgress.failOne(msg.bucketRef),
+              _ =>  ConsoleProgress.completeOne(msg.bucketRef))
     } yield ()
   }
 

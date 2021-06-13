@@ -58,7 +58,31 @@ final case class ConsoleProgressLive(
     }
   }
 
-  private def notifyOne(bucketRef: BucketRef, completed : Boolean): ZIO[Any, Nothing, Unit] =
+  def completeOne(bucketRef: BucketRef): ZIO[Any, Nothing, Unit] = modify(bucketRef, true, 1)
+  def failOne(bucketRef: BucketRef): ZIO[Any, Nothing, Unit] = modify(bucketRef, false, 1)
+
+  def completeMany(bucketRef: BucketRef, amount : Int): ZIO[Any, Nothing, Unit] = modify(bucketRef, true, amount)
+  def failMany(bucketRef: BucketRef, amount : Int): ZIO[Any, Nothing, Unit] = modify(bucketRef, false, amount)
+
+  def failAll(bucketRef: BucketRef) : ZIO[Any, Nothing, Unit] = {
+    progressBarsRef.modify { bars =>
+      ZIO.succeed {
+        val barIndex = bars.indexWhere(_.layout.label == bucketRef.barLabel)
+        barIndex match {
+          case -1 => // This is a defect
+            throw new IllegalStateException(s"Could not find progress bar with label '${bucketRef.barLabel}'")
+          case i =>
+            val j = bucketRef.bucketIndex
+            val oldBucket = bars(i).buckets(j)
+            val newBucket = oldBucket.copy(completed = 0, failed = oldBucket.size)
+            val updatedBuckets = bars(i).buckets.updated(j, newBucket)
+            ((), bars.updated(i, bars(i).copy(buckets = updatedBuckets)))
+        }
+      }
+    }
+  }
+
+  private def modify(bucketRef: BucketRef, completed : Boolean, amount : Int): ZIO[Any, Nothing, Unit] =
     progressBarsRef.modify { bars =>
       ZIO.succeed {
         val barIndex = bars.indexWhere(_.layout.label == bucketRef.barLabel)
@@ -69,16 +93,15 @@ final case class ConsoleProgressLive(
             val j = bucketRef.bucketIndex
             val oldBucket = bars(i).buckets(j)
             val newBucket =
-              if (completed) oldBucket.copy(completed = oldBucket.completed + 1)
-              else oldBucket.copy(failed = oldBucket.failed + 1)
+              if (completed) oldBucket.copy(completed = oldBucket.completed + amount)
+              else oldBucket.copy(failed = oldBucket.failed + amount)
             val updatedBuckets = bars(i).buckets.updated(j, newBucket)
             ((), bars.updated(i, bars(i).copy(buckets = updatedBuckets)))
         }
       }
     }
 
-  def completeOne(bucketRef: BucketRef): ZIO[Any, Nothing, Unit] = notifyOne(bucketRef, true)
-  def failOne(bucketRef: BucketRef): ZIO[Any, Nothing, Unit] = notifyOne(bucketRef, false)
+
 
   def drawProgress: ZIO[Any, IOException, Unit] = {
     for {

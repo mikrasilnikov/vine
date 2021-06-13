@@ -18,14 +18,17 @@ import pd2.helpers.Conversions._
 import pd2.ui.consoleprogress.ConsoleProgress
 import pd2.ui.consoleprogress.ConsoleProgress.BucketRef
 import zio.logging._
-
 import java.time.LocalDate
 
-final case class PageSummary(tracksCount : Int, pagerOpt : Option[Pager])
+final case class PageSummary(goodTracks: Int, brokenTracks : Int, pagerOpt: Option[Pager]) {
+  val totalTracks = goodTracks + brokenTracks
+}
 
 trait MusicStoreDataProvider {
 
     type SttpBytesRequest = RequestT[client3.Identity, Either[String, Array[Byte]], Any]
+
+    def host : String
 
     protected val consoleProgress   : ConsoleProgress.Service
     protected val sttpClient        : SttpClient.Service
@@ -38,22 +41,12 @@ trait MusicStoreDataProvider {
     protected val trackRequest: RequestT[Empty, Either[String, Array[Byte]], Any] =
         providerBasicRequest.response(asByteArray)
 
-    /** Результат скачиывания трека. Успех, ошибка или пропуск.
-     *  Пропуски возвращаются, если пользователь явно указал, что не
-     *  хочет скачивать треки, указав соответствующий аргумент к. строки. */
-    sealed trait TrackDownloadResult
-    object TrackDownloadResult {
-        final case class Success(data : Array[Byte]) extends TrackDownloadResult
-        final case object Failure extends TrackDownloadResult
-        final case object Skipped extends TrackDownloadResult
-    }
-
     def processTracks(
       feed          : Feed,
       dateFrom      : LocalDate,
       dateTo        : LocalDate,
       queue         : Queue[TrackMsg],
-      completionP   : Promise[Nothing, Unit])
+      completionP   : Promise[Nothing, Unit]) // Signals to consumers that publishing to queue is finished.
     : ZIO[Counters with ConsoleProgress with Clock with Logging with ConnectionsLimiter with ConsoleProgress,
       Throwable, Unit]
     =
@@ -66,56 +59,91 @@ trait MusicStoreDataProvider {
 
         _ <- firstSummary match {
 
-                    case PageSummary(count, None) => for
-                    {
-                        buckets <- ConsoleProgress.initializeBar(feed.name, List(count))
-                        _       <- Counters.modify(s"${feed.name}_P", count)
-                        _       <- firstBucketP.succeed(buckets.head)
-                    } yield ()
+              case PageSummary(0, 0, None) => for {
+                buckets <- ConsoleProgress.initializeBar(feed.name, List(1))
+                _       <- firstBucketP.succeed(buckets.head)
+                _       <- ConsoleProgress.completeBar(feed.name)
+              } yield ()
 
-                    case PageSummary(count, Some(Pager(_, last))) => for
-                    {
-                        lastSummaryP    <- Promise.make[Throwable, PageSummary]
-                        lastBucketP     <- Promise.make[Throwable, BucketRef]
+              case PageSummary(_, _, None) => for {
+                  buckets <- ConsoleProgress.initializeBar(feed.name, List(firstSummary.totalTracks))
+                  _       <- handleBrokenTracks(firstSummary, buckets.head, feed, dateFrom, dateTo, 1)
+                  _       <- firstBucketP.succeed(buckets.head)
+              } yield ()
 
-                        lastFiber   <- processTracklistPage(feed, dateFrom, dateTo, last, queue, lastBucketP, lastSummaryP).fork
-                        lastSummary <- lastSummaryP.await
-                        _           <- ZIO.die(new Exception(s"Got empty page ${feed.name}[$last]. Beatport 10K bug?"))
-                                        .when(lastSummary.tracksCount == 0)
+              case PageSummary(_, _, Some(Pager(_, last))) => for {
+                  lastSummaryP    <- Promise.make[Throwable, PageSummary]
+                  lastBucketP     <- Promise.make[Throwable, BucketRef]
 
-                        bucketSizes =  (1 until last).map(_ => count) :+ lastSummary.tracksCount
-                        buckets     <- ConsoleProgress.initializeBar(feed.name, bucketSizes.toList).map(_.toVector)
-                        _           <- Counters.modify(s"${feed.name}_P", bucketSizes.sum)
+                  lastFiber   <- processTracklistPage(feed, dateFrom, dateTo, last, queue, lastBucketP, lastSummaryP).fork
+                  lastSummary <- lastSummaryP.await
+                  _           <- log.warn(s"Got empty last page of ${feed.name}. Beatport 10K bug?")
+                                  .when(lastSummary.totalTracks == 0)
 
-                        _           <- firstBucketP.succeed(buckets.head)
-                        _           <- lastBucketP.succeed(buckets.last)
+                  bucketSizes =  (1 until last).map(_ => firstSummary.totalTracks) :+ lastSummary.totalTracks
+                  buckets     <- ConsoleProgress.initializeBar(feed.name, bucketSizes.toList).map(_.toVector)
 
-                        remainingPg =  (2 until last).toList
-                        _           <- ZIO.foreachParN_(8)(remainingPg)(pg =>
-                                        processTracklistPage(feed, dateFrom, dateTo, pg, queue, buckets(pg-1)))
+                  _           <- handleBrokenTracks(firstSummary, buckets.head, feed, dateFrom, dateTo, pageNum = 1)
+                  _           <- handleBrokenTracks(lastSummary, buckets.last, feed, dateFrom, dateTo, pageNum = last)
+                  _           <- firstBucketP.succeed(buckets.head)
+                  _           <- lastBucketP.succeed(buckets.last)
 
-                        _           <- lastFiber.join
-                    } yield ()
-                }
+                  remainingPg =  (2 until last).toList
+                  _           <- ZIO.foreachParN_(8)(remainingPg) { pg =>
+                                    processIntermediatePage(feed, dateFrom, dateTo, pg, queue, buckets(pg-1))
+                                  }
+
+                  _           <- lastFiber.join
+              } yield ()
+          }
 
         _   <- firstFiber.join
         _   <- completionP.succeed()
      } yield ()
 
-    def processTracklistPage(
-      feed             : Feed,
-      dateFrom         : LocalDate,
-      dateTo           : LocalDate,
-      pageNum          : Int,
-      queue            : Queue[TrackMsg],
-      bucketRef        : BucketRef
-    ): ZIO[Clock with Logging with ConnectionsLimiter with ConsoleProgress with Counters, Throwable, Unit] =
+  def processIntermediatePage(
+    feed             : Feed,
+    dateFrom         : LocalDate,
+    dateTo           : LocalDate,
+    pageNum          : Int,
+    queue            : Queue[TrackMsg],
+    bucketRef        : BucketRef
+  ): ZIO[Clock with Logging with ConnectionsLimiter with ConsoleProgress with Counters, Throwable, Unit] =
     for {
-        bucketP     <- Promise.make[Throwable, BucketRef]
-        summaryP    <- Promise.make[Throwable, PageSummary]
-        _           <- bucketP.succeed(bucketRef)
-        _           <- processTracklistPage(feed, dateFrom, dateTo, pageNum, queue, bucketP, summaryP)
+      bucketP     <- Promise.make[Throwable, BucketRef]
+      summaryP    <- Promise.make[Throwable, PageSummary]
+      fiber       <- processTracklistPage(feed, dateFrom, dateTo, pageNum, queue, bucketP, summaryP).fork
+      summary     <- summaryP.await
+      _           <- handleBrokenTracks(summary, bucketRef, feed, dateFrom, dateTo, pageNum) *>
+                     handleEmptyIntermediatePage(summary, bucketRef, feed, dateFrom, dateTo, pageNum)
+      _           <- bucketP.succeed(bucketRef)
+      _           <- fiber.join
     } yield ()
+
+  private def handleBrokenTracks(
+    pageSummary : PageSummary, bucketRef: BucketRef, feed : Feed, dateFrom : LocalDate, dateTo : LocalDate, pageNum : Int) =
+  {
+    if (pageSummary.brokenTracks > 0) {
+      for {
+        _         <- ConsoleProgress.failMany(bucketRef, pageSummary.brokenTracks)
+        url       <- ZIO.succeed(buildPageUri(host, feed.urlTemplate, dateFrom, dateTo, pageNum))
+        logString =  s"Broken tracks detected on $url"
+        _         <- log.warn(logString)
+      } yield ()
+    } else ZIO.succeed()
+  }
+
+  private def handleEmptyIntermediatePage(
+    pageSummary : PageSummary, bucketRef: BucketRef, feed : Feed, dateFrom : LocalDate, dateTo : LocalDate, pageNum : Int) = {
+    if (pageSummary.totalTracks == 0) {
+      for {
+        _         <- ConsoleProgress.failAll(bucketRef)
+        url       <- ZIO.succeed(buildPageUri(host, feed.urlTemplate, dateFrom, dateTo, pageNum))
+        logString =  s"Empty intermediate page (Beatport 10K bug?): $url"
+        _         <- log.warn(logString)
+      } yield ()
+    } else ZIO.succeed()
+  }
 
     def processTracklistPage(
       feed             : Feed,

@@ -11,8 +11,8 @@ import pd2.ui.consoleprogress.ConsoleProgress
 import pd2.ui.consoleprogress.ConsoleProgress.BucketRef
 import sttp.client3.httpclient.zio.SttpClient
 import zio.clock.Clock
-import zio.logging.Logging
-import zio.{Promise, Queue, ZIO, ZLayer}
+import zio.logging.{Logging, log}
+import zio._
 
 import java.nio.charset.StandardCharsets
 import java.time.LocalDate
@@ -22,7 +22,7 @@ case class BeatportLive(
   sttpClient          : SttpClient.Service)
   extends Beatport.Service {
 
-  val beatportHost = "https://www.beatport.com"
+  val host = "https://www.beatport.com"
 
   override def processTracklistPage(
     feed             : Feed,
@@ -35,17 +35,17 @@ case class BeatportLive(
   : ZIO[Clock with Logging with ConnectionsLimiter with Counters, Throwable, Unit] = {
     for {
       page    <- getTracklistWebPage(feed, dateFrom, dateTo, pageNum).tapError(e => outSummary.fail(e))
-      _       <- outSummary.succeed(PageSummary(page.tracks.length, page.pager))
+      _       <- outSummary.succeed(PageSummary(goodTracks = page.tracks.length, brokenTracks = 0, page.pager))
       bucket  <- inBucket.await
       msgs    =  page.tracks.map(st => TrackMsg(st.toTrackDto(feed.name), bucket))
-      _       <- queue.offerAll(msgs) *> Counters.modify(s"${feed.name}_M", msgs.length)
+      _       <- queue.offerAll(msgs) *> Counters.modify(feed.name, msgs.length)
     } yield ()
   }
 
   private def getTracklistWebPage(feed: Feed, dateFrom: LocalDate, dateTo: LocalDate, page: Int = 1)
   : ZIO[Clock with Logging with ConnectionsLimiter, Throwable, BeatportPage] = {
     for {
-      pageUri   <- buildPageUri(beatportHost, feed.urlTemplate, dateFrom, dateTo, page).toZio
+      pageUri   <- buildPageUri(host, feed.urlTemplate, dateFrom, dateTo, page).toZio
       pageResp  <- download(pageUri).map(bytes => new String(bytes, StandardCharsets.UTF_8))
       page      <- BeatportPage.parse(pageResp).toZio
     } yield page
