@@ -82,7 +82,7 @@ package object config {
         gSemaphore  <- Semaphore.make(globalConnectionsLimit)
         targetFolder= description.previewsFolder.replace("{0}",
                        if (from == to.minusDays(1)) from.toString
-                       else s"${from.toString}_${to.toString}")
+                       else s"${from.toString}_${to.minusDays(1).toString}")
 
       } yield new Service {
         val configDescription: ConfigDescription = description
