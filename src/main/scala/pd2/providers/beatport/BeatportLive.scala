@@ -4,6 +4,7 @@ import pd2.Application.TrackMsg
 import pd2.config.Config
 import pd2.config.ConfigDescription.Feed
 import pd2.conlimiter.ConnectionsLimiter
+import pd2.counters.Counters
 import pd2.helpers.Conversions.EitherToZio
 import pd2.providers.PageSummary
 import pd2.ui.consoleprogress.ConsoleProgress
@@ -31,13 +32,13 @@ case class BeatportLive(
     queue            : Queue[TrackMsg],
     inBucket         : Promise[Throwable, BucketRef],
     outSummary       : Promise[Throwable, PageSummary])
-  : ZIO[Clock with Logging with ConnectionsLimiter, Throwable, Unit] = {
+  : ZIO[Clock with Logging with ConnectionsLimiter with Counters, Throwable, Unit] = {
     for {
       page    <- getTracklistWebPage(feed, dateFrom, dateTo, pageNum).tapError(e => outSummary.fail(e))
       _       <- outSummary.succeed(PageSummary(page.tracks.length, page.pager))
       bucket  <- inBucket.await
       msgs    =  page.tracks.map(st => TrackMsg(st.toTrackDto(feed.name), bucket))
-      _       <- queue.offerAll(msgs)
+      _       <- queue.offerAll(msgs) *> Counters.modify(s"${feed.name}_M", msgs.length)
     } yield ()
   }
 

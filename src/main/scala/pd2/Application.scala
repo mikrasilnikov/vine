@@ -7,6 +7,7 @@ import org.slf4j.LoggerFactory
 import pd2.config.Config
 import pd2.config.ConfigDescription.Feed
 import pd2.conlimiter.{ConnectionsLimiter, ConnectionsLimiterLive}
+import pd2.counters.{Counters, CountersLive}
 import pd2.data.{Backend, DatabaseService, Pd2Database}
 import pd2.processing.Deduplication._
 import pd2.processing.{Deduplication, Saving}
@@ -30,7 +31,6 @@ import zio.logging.slf4j.Slf4jLogger
 import zio.nio.core.file.Path
 import zio.nio.file.Files
 import zio.system.System
-
 import java.time.format.DateTimeFormatter
 import java.time.{LocalDate, LocalDateTime}
 import scala.util.Try
@@ -46,7 +46,7 @@ object Application extends zio.App {
 
     val periodOption = for {
       (from, to) <- getParam(args, "--date", parsePeriod, default = None)
-    } yield (from, to)
+    } yield (from, to.plusDays(1))
 
     val environmentOption = for {
       (from, to)  <- periodOption
@@ -73,6 +73,7 @@ object Application extends zio.App {
 
       feeds         <- Config.configDescription.map(_.feeds)
       _             <- processFeeds(feeds)
+      _             <- Counters.ensureAllZero
 
       _             <- clock.sleep(1000.millis) *> progressFiber.interrupt
     } yield ()
@@ -105,13 +106,18 @@ object Application extends zio.App {
       provider    <- getProviderByFeedTag(feed.tag)
       filter      =  feed.filterTags.map(getFilterByTag).foldLeft(filters.withArtistAndTitle)(_ ++ _)
 
-      queue       <- Queue.bounded[TrackMsg](1000)
+      queue       <- Queue.unbounded[TrackMsg]
       completionP <- Promise.make[Nothing, Unit]
 
-      workersFib  <- ZIO.forkAll(List.fill(workerNum)(
-                      createWorker(queue, completionP)(msg => processTrack(msg, filter, feedPath, folderSem))))
+      workers     <- ZIO.forkAll(List.fill(workerNum)(
+                      runWorker(queue, completionP)(msg => processTrack(msg, filter, feedPath, folderSem))))
+
       _           <- provider.processTracks(feed, from, to, queue, completionP)
-      _           <- workersFib.join
+
+      _           <- workers.join
+      rem         <- queue.size
+      _           <- log.info(s"feed ${feed.name} completed. $rem messages remaining.")
+      _           <- queue.shutdown
     } yield ()
   }
 
@@ -138,22 +144,39 @@ object Application extends zio.App {
     } yield ()
 
     for {
+      _ <- Counters.modify(s"${msg.dto.feed}_M", -1)
       _ <- deduplicateOrDownload(msg).whenM(filter.check(msg.dto))
             .foldCauseM( // Report error to user, continue processing
               c =>  log.error(s"Download failed\nUrl: ${msg.dto.mp3Url}\n${c.prettyPrint}") *>
-                    ConsoleProgress.failOne(msg.bucketRef),
-              _ =>  ConsoleProgress.completeOne(msg.bucketRef))
+                    ConsoleProgress.failOne(msg.bucketRef)      *> Counters.modify(s"${msg.dto.feed}_P", -1),
+              _ =>  ConsoleProgress.completeOne(msg.bucketRef)  *> Counters.modify(s"${msg.dto.feed}_P", -1))
     } yield ()
   }
 
   def makeFileName(dto : TrackDto): String = {
     val durationStr = f"${dto.duration.toSeconds / 60}%02d:${dto.duration.toSeconds % 60}%02d"
     val withoutExt = s"[${dto.label}] [${dto.releaseName}] - ${dto.artist} - ${dto.title} - [$durationStr]"
-    // Имя файла не должно быть длиннее 255 символов для windows
-    (if (withoutExt.length >= 251) withoutExt.substring(0, 251) else withoutExt) ++ ".mp3"
+    // File name length limit on Windows.
+    val result = (if (withoutExt.length >= 251) withoutExt.substring(0, 251) else withoutExt) ++ ".mp3"
+    result.replaceAll("([<>:\"/\\\\|?*])", "_")
   }
 
-  private def createWorker[A, R](queue: Queue[A], drainSignal: Promise[Nothing, Unit])(process : A => ZIO[R, Throwable, Unit])
+  def runWorker[A, R](queue: Queue[A], stopSignal: Promise[Nothing, Unit])(process: A => ZIO[R, Throwable, Unit])
+  : ZIO[R with Clock, Throwable, Unit] =
+  {
+    for {
+      aOpt  <- queue.poll
+      stop  <- stopSignal.isDone
+      _ <- (aOpt, stop) match {
+        case (Some(a), _) => process(a) *> runWorker(queue, stopSignal)(process)
+        case (None, false) => ZIO.sleep(1.milli) *> runWorker(queue, stopSignal)(process)
+        case (None, true) => ZIO.succeed()
+      }
+    } yield ()
+  }
+
+  // Non polling version, does not work :(
+  private def runWorker1[A, R](queue: Queue[A], drainSignal: Promise[Nothing, Unit])(process : A => ZIO[R, Throwable, Unit])
   : ZIO[R, Throwable, Unit] =
   {
     def take: ZIO[R, Throwable, Unit] = for {
@@ -235,7 +258,8 @@ object Application extends zio.App {
       Pd2Database with
       Logging with
       ConnectionsLimiter with
-      SttpClient] =
+      SttpClient with
+      Counters] =
   {
     import sttp.client3.httpclient.zio.HttpClientZioBackend
 
@@ -253,8 +277,10 @@ object Application extends zio.App {
 
     val logging = Slf4jLogger.make ((_, message) => message)
 
+    val counters = CountersLive.makeLayer
+
     traxsource ++ beatport ++ progress ++ config ++
-      database ++ logging ++ conLimiter ++ sttpClient
+      database ++ logging ++ conLimiter ++ sttpClient ++ counters
   }
 
   def configureLogging(): Unit = {

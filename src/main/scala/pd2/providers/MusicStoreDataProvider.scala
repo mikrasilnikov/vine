@@ -4,6 +4,7 @@ import pd2.Application.TrackMsg
 import pd2.config.Config
 import pd2.config.ConfigDescription.Feed
 import pd2.conlimiter.ConnectionsLimiter
+import pd2.counters.Counters
 import pd2.providers.Exceptions._
 import pd2.providers.filters._
 import sttp.client3
@@ -53,7 +54,9 @@ trait MusicStoreDataProvider {
       dateTo        : LocalDate,
       queue         : Queue[TrackMsg],
       completionP   : Promise[Nothing, Unit])
-    : ZIO[Clock with Logging with ConnectionsLimiter with ConsoleProgress, Throwable, Unit] =
+    : ZIO[Counters with ConsoleProgress with Clock with Logging with ConnectionsLimiter with ConsoleProgress,
+      Throwable, Unit]
+    =
      for {
         firstSummaryP   <- Promise.make[Throwable, PageSummary]
         firstBucketP    <- Promise.make[Throwable, BucketRef]
@@ -66,6 +69,7 @@ trait MusicStoreDataProvider {
                     case PageSummary(count, None) => for
                     {
                         buckets <- ConsoleProgress.initializeBar(feed.name, List(count))
+                        _       <- Counters.modify(s"${feed.name}_P", count)
                         _       <- firstBucketP.succeed(buckets.head)
                     } yield ()
 
@@ -81,6 +85,7 @@ trait MusicStoreDataProvider {
 
                         bucketSizes =  (1 until last).map(_ => count) :+ lastSummary.tracksCount
                         buckets     <- ConsoleProgress.initializeBar(feed.name, bucketSizes.toList).map(_.toVector)
+                        _           <- Counters.modify(s"${feed.name}_P", bucketSizes.sum)
 
                         _           <- firstBucketP.succeed(buckets.head)
                         _           <- lastBucketP.succeed(buckets.last)
@@ -104,7 +109,7 @@ trait MusicStoreDataProvider {
       pageNum          : Int,
       queue            : Queue[TrackMsg],
       bucketRef        : BucketRef
-    ): ZIO[Clock with Logging with ConnectionsLimiter with ConsoleProgress, Throwable, Unit] =
+    ): ZIO[Clock with Logging with ConnectionsLimiter with ConsoleProgress with Counters, Throwable, Unit] =
     for {
         bucketP     <- Promise.make[Throwable, BucketRef]
         summaryP    <- Promise.make[Throwable, PageSummary]
@@ -120,7 +125,7 @@ trait MusicStoreDataProvider {
       queue            : Queue[TrackMsg],
       inBucket         : Promise[Throwable, BucketRef],
       outSummary       : Promise[Throwable, PageSummary])
-    : ZIO[Clock with Logging with ConnectionsLimiter with ConsoleProgress, Throwable, Unit]
+    : ZIO[Clock with Logging with ConnectionsLimiter with ConsoleProgress with Counters, Throwable, Unit]
 
     private[providers] def buildPageUri(
       host        : String,
