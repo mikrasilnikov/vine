@@ -46,7 +46,7 @@ object Application extends zio.App {
 
     val periodOption = for {
       (from, to) <- getParam(args, "--date", parsePeriod, default = None)
-    } yield (from, to.plusDays(1))
+    } yield (from, to)
 
     val environmentOption = for {
       (from, to)  <- periodOption
@@ -209,13 +209,13 @@ object Application extends zio.App {
     _ <- putStrLn("java -jar PreviewsDownloader2.jar --date=2021-05-01,2021-05-02 --config=config.json --database=data.db --maxConnections=16")
   } yield ()
 
-  /** "2021-06-01,2021-06-02" */
+  /** "2021-06-01,2021-06-03" */
   def parsePeriod(str : String) : (LocalDate, LocalDate) = {
     val splitted = str.split(',')
     if (splitted.length == 1)
       (LocalDate.parse(splitted(0)), LocalDate.parse(splitted(0)).plusDays(1))
     else
-      (LocalDate.parse(splitted(0)), LocalDate.parse(splitted(1)))
+      (LocalDate.parse(splitted(0)), LocalDate.parse(splitted(1)).plusDays(1))
   }
 
   /**
