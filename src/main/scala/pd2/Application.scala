@@ -66,8 +66,8 @@ object Application extends zio.App {
 
     val effect = for {
       _             <- log.info("Application starting...")
-      previewsBase  <- Config.previewsBasePath
-      _             <- Files.createDirectory(previewsBase).whenM(Files.notExists(previewsBase))
+//      previewsBase  <- Config.previewsBasePath
+//      _             <- Files.createDirectory(previewsBase).whenM(Files.notExists(previewsBase))
 
       progressFiber <- ConsoleProgress.drawProgress.repeat(Schedule.fixed(500.millis)).forever.fork
 

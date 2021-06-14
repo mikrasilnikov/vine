@@ -9,15 +9,17 @@ import pd2.providers.Exceptions._
 import pd2.providers.filters._
 import sttp.client3
 import sttp.client3._
-import sttp.client3.httpclient.zio.SttpClient
+import sttp.client3.httpclient.zio.{SttpClient, send}
 import sttp.model._
 import zio._
 import zio.clock.Clock
 import zio.duration.durationInt
 import pd2.helpers.Conversions._
+import pd2.providers.MusicStoreDataProvider.{SttpBytesRequest, providerBasicRequest}
 import pd2.ui.consoleprogress.ConsoleProgress
 import pd2.ui.consoleprogress.ConsoleProgress.BucketRef
 import zio.logging._
+
 import java.time.LocalDate
 
 final case class PageSummary(goodTracks: Int, brokenTracks : Int, pagerOpt: Option[Pager]) {
@@ -26,17 +28,10 @@ final case class PageSummary(goodTracks: Int, brokenTracks : Int, pagerOpt: Opti
 
 trait MusicStoreDataProvider {
 
-    type SttpBytesRequest = RequestT[client3.Identity, Either[String, Array[Byte]], Any]
-
     def host : String
 
     protected val consoleProgress   : ConsoleProgress.Service
     protected val sttpClient        : SttpClient.Service
-
-    protected val providerBasicRequest: RequestT[Empty, Either[String, String], Any] = basicRequest
-      .header(HeaderNames.UserAgent,
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.61 Safari/537.36")
-      .readTimeout(concurrent.duration.Duration(30, concurrent.duration.SECONDS))
 
     protected val trackRequest: RequestT[Empty, Either[String, Array[Byte]], Any] =
         providerBasicRequest.response(asByteArray)
@@ -175,33 +170,46 @@ trait MusicStoreDataProvider {
         Uri.parse(uriStr)
           .left.map(msg => InternalConfigurationError(s"Не удалось приготовить ссылку по шаблону $urlTemplate, $msg"))
     }
+}
 
-    /**
-     * Скачивает данные по ссылке. Использует таймаут на запрос, не-200 коды считаются ошибками.
-     * Делает 10 повторных попыток при любых ошибках. Если передан progressItem, выставляет его
-     * в состояние InProgress (анимация /-\|) при первой повторной попытке. После 10 неудачных
-     * попыток возващает последнюю ошибку.
-     */
-    protected def download(uri : Uri)
-    : ZIO[Clock with Logging with ConnectionsLimiter, Throwable, Array[Byte]] =
-    {
-        def send(req : SttpBytesRequest) : ZIO[Clock, Throwable, Array[Byte]] = for {
-            resp        <- sttpClient.send(req).timeoutFail(ServiceUnavailable("Timeout", uri))(5.minutes)
-            data        <- resp.body.toZio.mapError(err => ServiceUnavailable(s"Status code ${resp.code.code}, $err", uri))
-            lengthOpt   =  resp.headers.find(_.name == HeaderNames.ContentLength).map(_.value.toInt)
-            _           <- ZIO.fail(BadContentLength("Bad content length", uri))
-                            .unless(lengthOpt.forall(_ == data.length))
-        } yield data
+object MusicStoreDataProvider {
 
-        for {
-            req             <- ZIO.effect(providerBasicRequest.get(uri).response(asByteArray))
-            schedule        =  Schedule.recurs(10) && Schedule.spaced(5.seconds)
-            resp            <- ConnectionsLimiter.withPermit(uri) {
-                                    log.trace(s"$uri") *>
-                                    send(req).tapError { e => log.warn(s"Retrying\n$uri\n(failed with ${e.toString})") }
-                                }
-                                .retry(schedule)
-                                .tapError(e => log.warn(s"Could not download $uri, error: $e"))
-        } yield resp
-    }
+  type SttpBytesRequest = RequestT[client3.Identity, Either[String, Array[Byte]], Any]
+
+  protected val providerBasicRequest: RequestT[Empty, Either[String, String], Any] = basicRequest
+    .header(HeaderNames.UserAgent,
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.61 Safari/537.36")
+
+  def fetchWithTimeoutAndRetry(sttpClient : SttpClient.Service, uri : Uri)
+  : ZIO[ConnectionsLimiter with Logging with Clock, Throwable, Array[Byte]] = {
+
+    def attempt(req : SttpBytesRequest) = for {
+      resp  <- sttpClient.send(req).timeout(2.minutes)
+      body  <- resp match {
+        case None => ZIO.fail(ServiceUnavailable("Timeout", uri))
+
+        case Some(Response(Left(msg),code,text,_,_,_)) =>
+          ZIO.fail(ServiceUnavailable(s"Status code $code: $text | $msg", uri))
+
+        case Some(Response(Right(body),_,_,headers,_,_)) =>
+          val contentLength = headers.find(_.name == HeaderNames.ContentLength).map(_.value.toInt)
+          val lengthValid = contentLength.fold(true)(l => body.length == l)
+          if (lengthValid) ZIO.succeed(body)
+          else ZIO.fail(BadContentLength(s"Bad content length", uri))
+      }
+    } yield body
+
+    val retries = 10
+    val spaced = 10.seconds
+
+    for {
+      req       <- ZIO(providerBasicRequest.get(uri).response(asByteArray))
+      schedule  =  (Schedule.recurs(retries) && Schedule.spaced(spaced))
+                    .tapOutput { case (n, _) => log.warn(s"Retrying $uri").when(n < retries) }
+      body      <- ConnectionsLimiter.withPermit(uri) {
+                    log.trace(s"$uri") *>
+                    attempt(req).tapError { e => log.warn(s"Got ${e.toString} while sending $uri") }
+                  }.retry(schedule)
+    } yield body
+  }
 }

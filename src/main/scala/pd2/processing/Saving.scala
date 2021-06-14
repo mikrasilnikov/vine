@@ -1,9 +1,7 @@
 package pd2.processing
 
 import pd2.conlimiter.ConnectionsLimiter
-import pd2.helpers.Conversions._
-import pd2.providers.Exceptions._
-import pd2.providers.TrackDto
+import pd2.providers.MusicStoreDataProvider
 import sttp.client3
 import sttp.client3._
 import sttp.client3.httpclient.zio.SttpClient
@@ -11,7 +9,6 @@ import sttp.model._
 import zio._
 import zio.blocking.Blocking
 import zio.clock.Clock
-import zio.duration._
 import zio.logging._
 import zio.nio.core.file._
 import zio.nio.file.Files
@@ -27,28 +24,22 @@ object Saving {
     .response(asByteArray)
 
   def downloadWithRetry(uri : Uri, to : Path, folderSem : Semaphore)
-  : ZIO[ConnectionsLimiter with SttpClient with Logging with Clock with Blocking, Throwable, Unit] =
+  : ZIO[SttpClient with ConnectionsLimiter with Logging with Clock with Blocking, Throwable, Unit] =
   {
-    import sttp.client3.httpclient.zio._
-    def perform(req : SttpBytesRequest) = for {
-      resp        <- send(req).timeoutFail(ServiceUnavailable("Timeout", uri))(5.minutes)
-      data        <- resp.body.toZio.mapError(err => ServiceUnavailable(s"Status code ${resp.code.code}, $err", uri))
-      lengthOpt   =  resp.headers.find(_.name == HeaderNames.ContentLength).map(_.value.toInt)
-      _           <- ZIO.fail(BadContentLength("Bad content length", uri)).unless(lengthOpt.forall(_ == data.length))
-    } yield data
-
     for {
-      req       <- ZIO.effect(requestBase.get(uri).response(asByteArray))
-      schedule  =  Schedule.recurs(10) && Schedule.spaced(5.seconds)
-      resp      <- ConnectionsLimiter.withPermit(uri) {
-                      log.trace(s"$uri") *>
-                      perform(req).tapError( e =>log.warn(s"Retrying\n$uri\n(failed with ${e.toString})"))
-                  }.retry(schedule)
-                  .tapError(e => log.warn(s"Could not download $uri, error: $e"))
-
-      directory =  to.parent.get
-      _         <- folderSem.withPermit(Files.createDirectory(directory).whenM(Files.notExists(directory)))
-      _         <- Files.writeBytes(to, Chunk.fromArray(resp))
+      sttpClient  <- ZIO.service[SttpClient.Service]
+      data        <- MusicStoreDataProvider.fetchWithTimeoutAndRetry(sttpClient, uri)
+      _           <- createDirectory(to.parent)
+      _           <- Files.writeBytes(to, Chunk.fromArray(data))
     } yield ()
   }
+
+  private def createDirectory(dir : Option[Path]) : ZIO[Blocking with Logging, Throwable, Unit] = {
+    dir match {
+      case None => ZIO.unit
+      case Some(d) => ZIO.ifM(Files.exists(d))(
+          ZIO.unit,
+          createDirectory(d.parent) *> Files.createDirectory(d))
+      }
+    }
 }

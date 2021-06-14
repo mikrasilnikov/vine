@@ -8,6 +8,7 @@ libraryDependencies ++= Seq(
   "org.xerial" % "sqlite-jdbc" % "3.34.0",
   "dev.zio" %% "zio-logging-slf4j" % "0.5.10",
   "ch.qos.logback" % "logback-classic" % "1.2.3",
+  "org.codehaus.janino" % "janino" % "3.1.4",
   "org.typelevel" %% "cats-parse" % "0.3.2",
   "dev.zio" %% "zio" % "1.0.9",
   "dev.zio" %% "zio-nio" % "1.0.0-RC10",
@@ -25,6 +26,7 @@ libraryDependencies ++= Seq(
   "org.scala-lang.modules" %% "scala-xml" % "1.3.0"
 )
 
+
 scalacOptions += "-Ymacro-annotations"
 
 testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework")
@@ -32,7 +34,18 @@ testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework")
 assembly / mainClass := Some("pd2.Application")
 assembly / assemblyJarName := "PreviewsDownloader2.jar"
 
+Compile / mainClass := Some("pd2.Application")
+
+// [Required] Enable plugin and automatically find def main(args:Array[String]) methods from the classpath
+enablePlugins(PackPlugin)
+
+// [Optional] Specify main classes manually
+// This example creates `hello` command (target/pack/bin/hello) that calls org.mydomain.Hello#main(Array[String])
+packMain := Map("hello" -> "pd2.Application")
+
 assembly / assemblyMergeStrategy := {
+  case PathList("META-INF", "DUMMY.DSA") => MergeStrategy.discard
+  case PathList("META-INF", "DUMMY.SF") => MergeStrategy.discard
   case PathList("META-INF", "MANIFEST.MF") => MergeStrategy.discard
   case _ => MergeStrategy.first
 }

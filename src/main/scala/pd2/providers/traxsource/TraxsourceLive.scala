@@ -50,9 +50,10 @@ case class TraxsourceLive(
     feed : Feed, dateFrom : LocalDate, dateTo : LocalDate, page: Int = 1)
   : ZIO[Clock with Logging with ConnectionsLimiter, Throwable, TraxsourcePage] =
   {
+    import pd2.providers.MusicStoreDataProvider._
     for {
       uri       <- buildPageUri(host, feed.urlTemplate, dateFrom, dateTo, page).toZio
-      pageResp  <- download(uri).map(bytes => new String(bytes, StandardCharsets.UTF_8))
+      pageResp  <- fetchWithTimeoutAndRetry(sttpClient, uri).map(bytes => new String(bytes, StandardCharsets.UTF_8))
       page      <- TraxsourcePage.parse(pageResp).toZio
     } yield page
   }
@@ -60,9 +61,10 @@ case class TraxsourceLive(
   private def getServiceData(trackIds : List[Int], feed : String)
   : ZIO[Clock with Logging with ConnectionsLimiter, Throwable, List[TraxsourceServiceTrack]] =
   {
+    import pd2.providers.MusicStoreDataProvider._
     for {
       serviceUri  <- buildTraxsourceServiceRequest(trackIds).toZio
-      serviceResp <- download(serviceUri).map(bytes => new String(bytes, StandardCharsets.UTF_8))
+      serviceResp <- fetchWithTimeoutAndRetry(sttpClient, serviceUri).map(bytes => new String(bytes, StandardCharsets.UTF_8))
       tracks      <- TraxsourceServiceTrack.fromServiceResponse(serviceResp, feed).toZio
     } yield tracks
   }

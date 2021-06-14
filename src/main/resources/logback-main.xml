@@ -1,12 +1,48 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <configuration>
-  <appender name="FILE" class="ch.qos.logback.core.FileAppender">
-    <file>PreviewsDownloader2.log</file>
+
+  <appender name="FILE1" class="ch.qos.logback.core.FileAppender">
+    <file>vine.log</file>
+
     <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
       <level>INFO</level>
     </filter>
+
+    <filter class="ch.qos.logback.core.filter.EvaluatorFilter">
+      <evaluator>
+        <matcher>
+          <Name>deduplication</Name>
+          <regex>Track deduplicated.</regex>
+        </matcher>
+        <expression>deduplication.matches(formattedMessage)</expression>
+      </evaluator>
+      <OnMatch>DENY</OnMatch>
+      <OnMismatch>NEUTRAL</OnMismatch>
+    </filter>
+
     <encoder>
 <!--      <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>-->
+      <pattern>%d{HH:mm:ss.SSS} %-5level - %msg%n</pattern>
+    </encoder>
+  </appender>
+
+  <appender name="FILE2" class="ch.qos.logback.core.FileAppender">
+    <file>vine-deduplication.log</file>
+
+    <filter class="ch.qos.logback.core.filter.EvaluatorFilter">
+      <evaluator>
+        <matcher>
+          <Name>deduplication</Name>
+          <regex>Track deduplicated.</regex>
+        </matcher>
+        <expression>deduplication.matches(formattedMessage)</expression>
+      </evaluator>
+      <OnMatch>ALLOW</OnMatch>
+      <OnMismatch>DENY</OnMismatch>
+    </filter>
+
+    <encoder>
+      <!--      <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>-->
       <pattern>%d{HH:mm:ss.SSS} %-5level - %msg%n</pattern>
     </encoder>
   </appender>
@@ -22,7 +58,8 @@
   <logger name="slick" level="off" />
   <logger name="pd2" level="all">
     <appender-ref ref="SERVER" />
-    <appender-ref ref="FILE" />
+    <appender-ref ref="FILE1" />
+    <appender-ref ref="FILE2" />
   </logger>
 
 <!--  <logger name="slick.jdbc.JdbcBackend.benchmark" level="debug" />-->

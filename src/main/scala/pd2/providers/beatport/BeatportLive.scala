@@ -6,7 +6,7 @@ import pd2.config.ConfigDescription.Feed
 import pd2.conlimiter.ConnectionsLimiter
 import pd2.counters.Counters
 import pd2.helpers.Conversions.EitherToZio
-import pd2.providers.PageSummary
+import pd2.providers.{MusicStoreDataProvider, PageSummary}
 import pd2.ui.consoleprogress.ConsoleProgress
 import pd2.ui.consoleprogress.ConsoleProgress.BucketRef
 import sttp.client3.httpclient.zio.SttpClient
@@ -44,9 +44,10 @@ case class BeatportLive(
 
   private def getTracklistWebPage(feed: Feed, dateFrom: LocalDate, dateTo: LocalDate, page: Int = 1)
   : ZIO[Clock with Logging with ConnectionsLimiter, Throwable, BeatportPage] = {
+    import MusicStoreDataProvider._
     for {
       pageUri   <- buildPageUri(host, feed.urlTemplate, dateFrom, dateTo, page).toZio
-      pageResp  <- download(pageUri).map(bytes => new String(bytes, StandardCharsets.UTF_8))
+      pageResp  <- fetchWithTimeoutAndRetry(sttpClient, pageUri).map(bytes => new String(bytes, StandardCharsets.UTF_8))
       page      <- BeatportPage.parse(pageResp).toZio
     } yield page
   }
