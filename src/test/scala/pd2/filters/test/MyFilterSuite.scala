@@ -1,19 +1,14 @@
-package pd2.providers.filters.test
+package pd2.filters.test
 
 import pd2.config.Config
 import pd2.config.test.ConfigMock
-import pd2.data.DatabaseService
 import pd2.data.test.{TestBackend, TestDatabaseService}
 import pd2.providers.TrackDto
-import pd2.processing.test.DeduplicationSuite.{suite, testM}
-import zio.ZIO
 import zio.logging.slf4j.Slf4jLogger
-import zio.test.Assertion.{anything, equalTo, isFalse, isTrue}
-import zio.test._
-import zio.test.DefaultRunnableSpec
+import zio.test.Assertion.{isFalse, isTrue}
+import zio.test.{DefaultRunnableSpec, _}
 import zio.test.mock.Expectation.value
-
-import java.time.{Duration, LocalDate, LocalDateTime}
+import java.time.{Duration, LocalDate}
 
 object MyFilterSuite extends DefaultRunnableSpec {
 
@@ -37,7 +32,7 @@ object MyFilterSuite extends DefaultRunnableSpec {
           "http://static.traxsource.com/qwerty.mp3")
 
         val test = for {
-          actual    <- pd2.providers.filters.my.check(trackDto)
+          actual    <- pd2.filters.my.check(trackDto)
         } yield assert(actual)(isTrue)
 
         test.provideCustomLayer(
@@ -61,7 +56,7 @@ object MyFilterSuite extends DefaultRunnableSpec {
           "http://static.traxsource.com/qwerty.mp3")
 
         val test = for {
-          actual    <- pd2.providers.filters.my.check(trackDto)
+          actual    <- pd2.filters.my.check(trackDto)
         } yield assert(actual)(isTrue)
 
         test.provideCustomLayer(
@@ -85,7 +80,7 @@ object MyFilterSuite extends DefaultRunnableSpec {
           "http://static.traxsource.com/qwerty.mp3")
 
         val test = for {
-          actual    <- pd2.providers.filters.my.check(trackDto)
+          actual    <- pd2.filters.my.check(trackDto)
         } yield assert(actual)(isTrue)
 
         test.provideCustomLayer(
@@ -109,7 +104,7 @@ object MyFilterSuite extends DefaultRunnableSpec {
           "http://static.traxsource.com/qwerty.mp3")
 
         val test = for {
-          actual    <- pd2.providers.filters.my.check(trackDto)
+          actual    <- pd2.filters.my.check(trackDto)
         } yield assert(actual)(isTrue)
 
         test.provideCustomLayer(
@@ -134,7 +129,7 @@ object MyFilterSuite extends DefaultRunnableSpec {
           "http://static.traxsource.com/qwerty.mp3")
 
         val test = for {
-          actual    <- pd2.providers.filters.my.check(trackDto)
+          actual    <- pd2.filters.my.check(trackDto)
         } yield assert(actual)(isTrue)
 
         test.provideCustomLayer(
@@ -159,7 +154,7 @@ object MyFilterSuite extends DefaultRunnableSpec {
           "http://static.traxsource.com/qwerty.mp3")
 
         val test = for {
-          actual    <- pd2.providers.filters.my.check(trackDto)
+          actual    <- pd2.filters.my.check(trackDto)
         } yield assert(actual)(isTrue)
 
         test.provideCustomLayer(
@@ -184,7 +179,7 @@ object MyFilterSuite extends DefaultRunnableSpec {
           "http://static.traxsource.com/qwerty.mp3")
 
         val test = for {
-          actual    <- pd2.providers.filters.my.check(trackDto)
+          actual    <- pd2.filters.my.check(trackDto)
         } yield assert(actual)(isFalse)
 
         test.provideCustomLayer(
@@ -209,7 +204,7 @@ object MyFilterSuite extends DefaultRunnableSpec {
           "http://static.traxsource.com/qwerty.mp3")
 
         val test = for {
-          actual    <- pd2.providers.filters.my.check(trackDto)
+          actual    <- pd2.filters.my.check(trackDto)
         } yield assert(actual)(isFalse)
 
         test.provideCustomLayer(

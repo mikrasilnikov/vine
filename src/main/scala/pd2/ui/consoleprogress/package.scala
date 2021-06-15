@@ -29,6 +29,7 @@ package object consoleprogress {
       def failOne(bucketRef : BucketRef) : ZIO[Any, Nothing, Unit]
 
       def drawProgress : ZIO[Any, IOException, Unit]
+      def drawProgress(headers : List[String]) : ZIO[Any, IOException, Unit]
       
     }
   }

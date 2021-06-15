@@ -1,22 +1,26 @@
 package pd2
 
 import zio.blocking.Blocking
-import zio.{Has, Semaphore, Task, ZIO, ZLayer}
+import zio.{Has, IO, Semaphore, Task, ZIO, ZLayer}
 import zio.macros.accessible
 import zio.nio.core.file.Path
 import zio.nio.file.Files
 import io.circe.parser._
-import pd2.config.ConfigDescription.{Feed, FeedTag, FilterTag}
+import pd2.config.ConfigModel._
 import pd2.helpers.Conversions.EitherToZio
 import zio.console.{Console, putStr, putStrLn}
-
 import java.io.{File, IOException}
 import java.nio.charset.StandardCharsets
-import java.nio.file.{Files => JFiles, Path => JPath}
 import java.time.{LocalDate, LocalDateTime}
+import scala.io.Source
 import scala.util.matching.Regex
+import pd2.config.ConfigDecoders._
 
 package object config {
+
+  sealed trait SourcesMode
+  final case class FromConfigFile(filePath : Path) extends SourcesMode
+  final case class FromGenreNames(names : List[String]) extends SourcesMode
 
   type Config = Has[Config.Service]
 
@@ -24,7 +28,7 @@ package object config {
   object Config {
 
     trait Service {
-      def configDescription   : ConfigDescription
+      def sourcesConfig       : SourcesConfig
       def dateFrom            : LocalDate
       def dateTo              : LocalDate
       /** Regular expressions to match on track artist and title. Used by "my" filter. */
@@ -44,48 +48,53 @@ package object config {
       def downloadTracks      : Boolean
     }
 
+    val genresFileName = "genres.json"
+
     /**
-     * @param filePath относительный путь к файлу конфигурации
+     * @param fileName относительный путь к файлу конфигурации
      * @param from стартовая дата релиза треков (включительно)
      * @param to конечная дата релиза треков (не включительно)
      * @param globalConnectionsLimit максимальное количество параллельных соединений
      */
     def makeLayer(
-      filePath                : Path,
-      from                    : LocalDate,
-      to                      : LocalDate,
-      perHostConnectionsLimit : Int,
-      globalConnectionsLimit  : Int,
-      doDownloadTracks        : Boolean)
+      sourcesMode : SourcesMode,
+      from        : LocalDate,
+      to          : LocalDate,
+      perHostConnectionsLimit: Int,
+      globalConnectionsLimit : Int,
+      doDownloadTracks       : Boolean)
     : ZLayer[Console with Blocking, Throwable, Config] = {
 
       val make = for {
-        _           <- putStr(s"Loading config from $filePath. ")
+        _           <- putStr(s"Loading sources... ")
 
         jarPath     <- ZIO.effectTotal(
-                          Path(new File(Config.getClass.getProtectionDomain.getCodeSource.getLocation.toURI).getPath).parent.get)
-        cfgPath     = jarPath / filePath
+          Path(new File(Config.getClass.getProtectionDomain.getCodeSource.getLocation.toURI).getPath).parent.get)
 
-        jsonString  <- Files.readAllBytes(cfgPath).map(c => new String(c.toArray, StandardCharsets.UTF_8))
-        json        <- parse(jsonString).toZio.mapError(s => new Exception(s))
-        description <- json.as[ConfigDescription].toZio
+        sourcesCfg  <- sourcesMode match {
+                      case FromConfigFile(fileName) =>
+                        buildSourcesConfigFromFile(jarPath / fileName)
+                      case FromGenreNames(names) =>
+                        deployGenresJson(jarPath) *>
+                        buildSourcesFromGenresList(names, jarPath / genresFileName)
+                    }
 
-        artistsRegxp<- loadLines(jarPath / description.my.artistsFile).map(list => list.map(buildArtistRegex))
-        labels      <- loadLines(jarPath / description.my.labelsFile)
-        shit        <- loadLines(description.noShit.dataFiles.map(jarPath / _))
+        artistsRegxp<- loadLines(jarPath / sourcesCfg.filtersConfig.my.artistsFile).map(list => list.map(buildArtistRegex))
+        labels      <- loadLines(jarPath / sourcesCfg.filtersConfig.my.labelsFile)
+        shit        <- loadLines(sourcesCfg.filtersConfig.noShit.dataFiles.map(jarPath / _))
 
         _           <- putStr(s"Loaded ${artistsRegxp.length} watched artists and ${labels.length} watched labels. ")
         _           <- putStrLn(s"Loaded ${shit.length} ignored labels.")
 
         localDt     <- ZIO.succeed(LocalDateTime.now().withNano(0))
-        _           <- ensureCorrectDateRangeIsUsedWithTraxsourceFeeds(description.feeds, from, localDt.toLocalDate)
+        _           <- ensureCorrectDateRangeIsUsedWithTraxsourceFeeds(sourcesCfg.feeds, from, localDt.toLocalDate)
         gSemaphore  <- Semaphore.make(globalConnectionsLimit)
-        targetFolder= description.previewsFolder.replace("{0}",
+        targetFolder= sourcesCfg.previewsFolder.replace("{0}",
                        if (from == to.minusDays(1)) from.toString
                        else s"${from.toString}_${to.minusDays(1).toString}")
 
       } yield new Service {
-        val configDescription: ConfigDescription = description
+        val sourcesConfig: SourcesConfig = sourcesCfg
         val dateFrom: LocalDate = from
         val dateTo: LocalDate = to
         val myArtistsRegexes: List[Regex] = artistsRegxp
@@ -127,6 +136,38 @@ package object config {
             |Please use more recent date range or remove feeds with urls starting with /just-added or /dj-top-10s
             |Problematic feeds: """.stripMargin ++ problematic.map(_.name).mkString(", ")
         )).when(problematic.nonEmpty && dateFrom.compareTo(earliest) < 0)
+      } yield ()
+    }
+
+    private def buildSourcesConfigFromFile(filePath : Path) =
+    {
+      for {
+        jsonString  <- Files.readAllBytes(filePath).map(c => new String(c.toArray, StandardCharsets.UTF_8))
+        json        <- parse(jsonString).toZio.mapError(s => new Exception(s))
+        sources     <- json.as[SourcesConfig].toZio
+      } yield sources
+    }
+
+    private def buildSourcesFromGenresList(names: List[String], genresFilePath: Path) = {
+      for {
+        jsonString    <- Files.readAllBytes(genresFilePath).map(c => new String(c.toArray, StandardCharsets.UTF_8))
+        json          <- parse(jsonString).toZio.mapError(s => new Exception(s))
+        genresConfig  <- json.as[GenresConfig].toZio
+        unknownGenres =  names.filter(n => !genresConfig.genres.exists(_.name == n))
+        _             <- ZIO.fail(new Exception(s"Unknown genres: ${unknownGenres.mkString(", ")}"))
+                          .when(unknownGenres.nonEmpty)
+        resFeeds      =  genresConfig.genres.filter(g => names.contains(g.name)).flatMap(_.feeds)
+      } yield SourcesConfig(genresConfig.previewsFolder, genresConfig.filtersConfig, resFeeds)
+    }
+
+
+    private def deployGenresJson(jarPath : Path) : ZIO[Blocking, Throwable, Unit] = {
+      for {
+        targetPath  <- ZIO(jarPath / Path(genresFileName)).debug
+        _           <- ZIO.ifM(Files.exists(targetPath))(
+                        ZIO.unit,
+                        IO(Source.fromResource(genresFileName).getLines().toList)
+                          .flatMap(ls => Files.writeLines(targetPath, ls)))
       } yield ()
     }
   }

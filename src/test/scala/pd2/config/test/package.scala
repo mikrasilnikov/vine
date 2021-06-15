@@ -12,7 +12,7 @@ package object test {
 
   object ConfigMock extends Mock[Config] {
 
-    object ConfigDescription extends Method[Unit, Nothing, ConfigDescription]
+    object ConfigDescription extends Method[Unit, Nothing, SourcesConfig]
     object DateFrom extends Method[Unit, Nothing, LocalDate]
     object DateTo extends Method[Unit, Nothing, LocalDate]
     object MyArtistsRegexes extends Method[Unit, Nothing, List[Regex]]
@@ -29,7 +29,7 @@ package object test {
       ZLayer.fromServiceM { proxy =>
         withRuntime.map { rts =>
           new Config.Service {
-            def configDescription: ConfigDescription = rts.unsafeRun(proxy(ConfigDescription))
+            def sourcesConfig: SourcesConfig = rts.unsafeRun(proxy(ConfigDescription))
             def dateFrom : LocalDate = rts.unsafeRun(proxy(DateFrom))
             def dateTo : LocalDate = rts.unsafeRun(proxy(DateTo))
             def myArtistsRegexes: List[Regex] = rts.unsafeRun(proxy(MyArtistsRegexes))

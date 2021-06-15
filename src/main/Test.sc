@@ -2,8 +2,7 @@
 import zio._
 import zio.console._
 
+import java.time.LocalDate
 
-val failingEffect = ZIO.fail(new Exception("Boo!"))
-val schedule = Schedule.recurs(5).tapOutput(n => putStrLn(s"$n").when(n < 10).orElseSucceed())
-
-Runtime.default.unsafeRun(failingEffect.retry(schedule))
+LocalDate.now().minusDays(3)
+LocalDate.now().minusDays(2)

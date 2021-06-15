@@ -101,9 +101,9 @@ final case class ConsoleProgressLive(
       }
     }
 
+  def drawProgress: ZIO[Any, IOException, Unit] = drawProgress(List())
 
-
-  def drawProgress: ZIO[Any, IOException, Unit] = {
+  def drawProgress(headers : List[String]) : ZIO[Any, IOException, Unit] = {
     for {
       _ <- console.putStr("\u001b[?25l") // Hide cursor
       _ <- drawState.modify { state =>
@@ -116,6 +116,7 @@ final case class ConsoleProgressLive(
            }
       _ <- progressBarsRef.update { bars =>
               for {
+                _ <- ZIO.foreach_(headers)(h => console.putStr(ansi().a(h).cursorDown(1).cursorToColumn(1).toString))
                 _ <- ZIO.foreach_(bars)(bar => drawProgressBar(bar))
               } yield bars
             }

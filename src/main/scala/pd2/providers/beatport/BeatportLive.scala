@@ -2,7 +2,7 @@ package pd2.providers.beatport
 
 import pd2.Application.TrackMsg
 import pd2.config.Config
-import pd2.config.ConfigDescription.Feed
+import pd2.config.ConfigModel._
 import pd2.conlimiter.ConnectionsLimiter
 import pd2.counters.Counters
 import pd2.helpers.Conversions.EitherToZio

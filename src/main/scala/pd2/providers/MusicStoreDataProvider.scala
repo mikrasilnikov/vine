@@ -2,11 +2,11 @@ package pd2.providers
 
 import pd2.Application.TrackMsg
 import pd2.config.Config
-import pd2.config.ConfigDescription.Feed
+import pd2.config.ConfigModel.Feed
 import pd2.conlimiter.ConnectionsLimiter
 import pd2.counters.Counters
 import pd2.providers.Exceptions._
-import pd2.providers.filters._
+import pd2.filters._
 import sttp.client3
 import sttp.client3._
 import sttp.client3.httpclient.zio.{SttpClient, send}

@@ -48,7 +48,7 @@ object DataImport extends zio.App {
 
   def run(args: List[String]) = {
 
-    pd2.Application.configureLogging()
+    pd2.Application.configureLogging
 
     def customLayer(params : Params) = {
 

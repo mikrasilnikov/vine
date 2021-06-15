@@ -1,10 +1,11 @@
-package pd2.providers
+package pd2
 
-import pd2.config.ConfigDescription.FilterTag
-import pd2.config.Config
-import pd2.data._
 import zio._
 import zio.logging._
+import pd2.data._
+import pd2.providers._
+import pd2.config.Config
+import pd2.config.ConfigModel._
 import java.time._
 
 package object filters {
@@ -63,7 +64,7 @@ package object filters {
 
   val noEdits : TrackFilter = new TrackFilter {
     def check(dto: TrackDto): ZIO[FilterEnv, Throwable, Boolean] = for {
-      minDuration <- Config.configDescription.map(desc => Duration.ofSeconds(desc.noEdits.minTrackDurationSeconds))
+      minDuration <- Config.sourcesConfig.map(desc => Duration.ofSeconds(desc.filtersConfig.noEdits.minTrackDurationSeconds))
     } yield dto.duration.compareTo(minDuration) >= 0
   }
 
@@ -72,8 +73,6 @@ package object filters {
       case FilterTag.My             => my
       case FilterTag.IgnoredLabels  => ignoredLabels
       case FilterTag.NoEdits        => noEdits
-      // Deprecated
-      case FilterTag.NoCompilations => empty
-      case FilterTag.OnlyNew        => empty
+      case FilterTag.Empty          => empty
     }
 }

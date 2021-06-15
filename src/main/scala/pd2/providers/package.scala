@@ -1,6 +1,6 @@
 package pd2
 
-import pd2.config.ConfigDescription.FeedTag
+import pd2.config.ConfigModel.FeedTag
 import pd2.providers.beatport.Beatport
 import pd2.providers.traxsource.Traxsource
 import zio.{URIO, ZIO}
