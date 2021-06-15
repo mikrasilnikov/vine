@@ -5,20 +5,20 @@ import ch.qos.logback.classic.joran.JoranConfigurator
 import org.fusesource.jansi.AnsiConsole
 import org.slf4j.LoggerFactory
 import pd2.config._
-import pd2.conlimiter.{ConnectionsLimiter, ConnectionsLimiterLive}
-import pd2.counters.{Counters, CountersLive}
-import pd2.data.{Backend, DatabaseService, Pd2Database}
+import pd2.conlimiter._
+import pd2.counters._
+import pd2.data._
 import pd2.providers.TrackDto
-import pd2.providers.beatport.{Beatport, BeatportLive}
-import pd2.providers.traxsource.{Traxsource, TraxsourceLive}
+import pd2.providers.beatport._
+import pd2.providers.traxsource._
 import pd2.ui.ProgressBarDimensions
 import pd2.ui.consoleprogress.ConsoleProgress.BucketRef
-import pd2.ui.consoleprogress.{ConsoleProgress, ConsoleProgressLive}
+import pd2.ui.consoleprogress._
 import slick.jdbc.SQLiteProfile
 import sttp.client3.httpclient.zio.SttpClient
 import zio._
 import zio.blocking.Blocking
-import zio.console.{Console, putStrLn}
+import zio.console._
 import zio.duration.durationInt
 import zio.logging._
 import zio.logging.slf4j.Slf4jLogger
@@ -27,7 +27,7 @@ import zio.nio.file.Files
 import zio.system.System
 import pd2.processing._
 import java.time.format.DateTimeFormatter
-import java.time.{LocalDate, LocalDateTime}
+import java.time._
 import scala.util.Try
 
 object Application extends zio.App {
@@ -43,7 +43,7 @@ object Application extends zio.App {
       _             <- log.info("Application starting...")
 
       header        <- createHeader
-      progressFiber <- ConsoleProgress.drawProgress(List(header)).repeat(Schedule.fixed(500.millis)).forever.fork
+      progressFiber <- ConsoleProgress.drawProgress(List(header, "")).repeat(Schedule.fixed(500.millis)).forever.fork
       feeds         <- Config.sourcesConfig.map(_.feeds)
       _             <- processFeeds(feeds)
       _             <- clock.sleep(1000.millis) *> progressFiber.interrupt
@@ -60,8 +60,8 @@ object Application extends zio.App {
   private def createHeader: ZIO[Config, Throwable, String] = {
     for {
       (from, to) <- Config.dateFrom <*> Config.dateTo
-      header     =  if (from.plusDays(1) == to) s"\tDate: $from"
-                    else " " * 27 + s"Dates: [$from, $to]"
+      header     =  if (from.plusDays(1) == to) s"Period: [$from, $to)"
+                    else s"Period: [$from, ${to.minusDays(1)}]"
     } yield header
   }
 
@@ -138,7 +138,7 @@ object Application extends zio.App {
     traxsource ++ beatport ++ progress ++ config ++
       database ++ logging ++ conLimiter ++ sttpClient ++ counters
   }
-  
+
   private def logErrors[R,E,A](effect : ZIO[R,E,A]): ZIO[Blocking with Config with R, Any, A] = effect
     .tapCause(e => for {
       now       <- ZIO.effectTotal(LocalDateTime.now())

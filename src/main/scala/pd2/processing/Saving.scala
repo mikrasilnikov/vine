@@ -29,7 +29,7 @@ object Saving {
     for {
       sttpClient  <- ZIO.service[SttpClient.Service]
       data        <- MusicStoreDataProvider.fetchWithTimeoutAndRetry(sttpClient, uri)
-      _           <- createDirectory(to.parent)
+      _           <- folderSem.withPermit(createDirectory(to.parent))
       _           <- Files.writeBytes(to, Chunk.fromArray(data))
     } yield ()
   }

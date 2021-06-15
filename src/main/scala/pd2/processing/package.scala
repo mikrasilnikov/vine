@@ -47,7 +47,7 @@ package object processing {
       _           <- provider.processTracks(feed, from, to, queue, completionP)
 
       _           <- workers.join
-      _           <- queue.size.flatMap(rem => log.info(s"feed ${feed.name} completed. $rem messages remaining."))
+      //_           <- queue.size.flatMap(rem => log.info(s"feed ${feed.name} completed. $rem messages remaining."))
       _           <- queue.shutdown
     } yield ()
   }

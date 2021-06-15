@@ -1,7 +1,7 @@
 package pd2
 
 import zio.blocking.Blocking
-import zio.{Has, IO, Semaphore, Task, ZIO, ZLayer}
+import zio._
 import zio.macros.accessible
 import zio.nio.core.file.Path
 import zio.nio.file.Files
@@ -50,12 +50,6 @@ package object config {
 
     val genresFileName = "genres.json"
 
-    /**
-     * @param fileName относительный путь к файлу конфигурации
-     * @param from стартовая дата релиза треков (включительно)
-     * @param to конечная дата релиза треков (не включительно)
-     * @param globalConnectionsLimit максимальное количество параллельных соединений
-     */
     def makeLayer(
       sourcesMode : SourcesMode,
       from        : LocalDate,
