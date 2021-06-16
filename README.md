@@ -16,7 +16,7 @@ There are many.
   A single track may be published dozen times. There is no way anyone can remember hundreds of thousands
   titles to avoid listening to the same tune over and over again.
   
-All of this makes many DJs rely on charts and selections which makes sounding of the former derivative 
+All of this makes many DJs rely on charts and selections making sounding of the former derivative 
 and dull.
 
 ### How Title solves these problems?
@@ -35,8 +35,15 @@ and dull.
   ```
   java -jar title.jar --genres=house
   ```
-This would download house previews which had been published the day before yesterday 
+This would download house previews that had been published the day before yesterday 
 to `previews/{date}`.
+
+#### But I don't listen to house!
+The `--genres` parameter allows to specify one or more values separated by a comma. Here is an 
+example for downloading previews for all supported genres:
+```
+java -jar title.jar --genres=house,tech,funky,nudisco,soulful,soulfunk,deep,progressive,melodic,afro,techno,lounge,minimal,dnb
+```
 
 
 # Title
@@ -78,4 +85,10 @@ Title - это инструмент для DJ и любителей электр
   ```
   Это скачает превью треков в стиле house в папку `previews/{date}` за позавчера.
 
-#### Но мне не интересен house!
+#### Но я не слушаю house!
+Параметр `--genres` позволяет указать один или несколько стилей через запятую. Вот пример 
+команды для скачивания превью всех поддерживаемых стилей:
+```
+java -jar title.jar --genres=house,tech,funky,nudisco,soulful,soulfunk,deep,progressive,melodic,afro,techno,lounge,minimal,dnb
+```
+#### Но я хочу другую дату!

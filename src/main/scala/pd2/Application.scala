@@ -88,7 +88,7 @@ object Application extends zio.App {
     } yield makeEnvironment(
       hostConnections = 8,
       maxConnections  = maxConn,
-      barDimensions   = ProgressBarDimensions(27, 65),
+      barDimensions   = ProgressBarDimensions(28, 65),
       srcConfig       = srcConfig,
       dbFilePath      = dbPath,
       dateFrom        = from,
