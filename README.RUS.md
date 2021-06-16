@@ -68,4 +68,4 @@ java -jar title.jar --genres=house,tech,funky,nudisco,soulful,soulfunk,deep,prog
 
 - На текущий момент (2021-06-17) beatport некорректно отображает списки длиной более 10000 элементов. При проявлении
   этой проблемы на индикаторе прогресса будут отображаться восклицательные знаки:
-  
+  ![alt text](https://github.com/mikrasilnikov/PreviewsDownloader2/blob/main/img/beatport-10k.png "beatport 10k bug")
