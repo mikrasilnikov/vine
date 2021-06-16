@@ -68,4 +68,22 @@ java -jar title.jar --genres=house,tech,funky,nudisco,soulful,soulfunk,deep,prog
 
 - На текущий момент (2021-06-17) beatport некорректно отображает списки длиной более 10000 элементов. При проявлении
   этой проблемы на индикаторе прогресса будут отображаться восклицательные знаки:
+  
+
   ![alt text](https://github.com/mikrasilnikov/PreviewsDownloader2/blob/main/img/beatport-10k.png "beatport 10k bug")
+  
+  а в логах появятся записи
+
+  ```
+  Got empty last page of 01-my-beatport. Beatport 10K bug?
+  Empty intermediate page (Beatport 10K bug?): Right(https://www.beatport.com/tracks/all?per-page=150&start-date=2021-01-01&end-date=2021-01-08&page=67)
+  ```
+  Поддержка признает наличие проблемы и говорит, что они вовсю работают над этим.
+  
+- Режим `my` для traxsource использует раздел [Just Added](https://www.traxsource.com/just-added?cn=tracks&ipp=100). 
+  В этом разделе не отображаются треки, опубликованные раньше, чем полгода назад. Поэтому если указать более раннюю дату,
+  будет выдано сообщение об ошибке
+  ```
+  Traxsource "Just Added" and "DJ Top 10s" sections do not work on dates earlier then 180 days prior to today.
+  Please use more recent date range or remove feeds with urls starting with /just-added or /dj-top-10s
+  ```
