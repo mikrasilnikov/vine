@@ -1,6 +1,6 @@
-# Title
+# Vine
 
-Title is a tool for DJs and electronic music lovers that allows them to quickly listen to previews
+Vine is a tool for DJs and electronic music lovers that allows them to quickly listen to previews
 for new tracks in popular online music stores (Beatport and Traxsource). The program saves time by
 downloading previews and allows users to employ their favorite media players.
 
@@ -18,10 +18,10 @@ There are many.
 
 All of this makes many DJs rely on charts and selections often making sounding of the former derivative.
 
-### How Title solves these problems?
-- Title downloads previews from specified period and enables user to evaluate them offline.
-- Title allows to blacklist labels in order to ignore obviously bad content.
-- Title maintains a database of processed music and does not download same track multiple times
+### How Vine solves these problems?
+- Vine downloads previews from specified period and enables user to evaluate them offline.
+- Vine allows to blacklist labels in order to ignore obviously bad content.
+- Vine maintains a database of processed music and does not download same track multiple times
   (see remark on deduplication below).
 
 ### Ok. How to try the thing?
@@ -29,10 +29,10 @@ All of this makes many DJs rely on charts and selections often making sounding o
   ```
   https://adoptopenjdk.net/
   ```
-- Download a release of title and extract it to separate folder.
+- Download a release of vine and extract it to separate folder.
 - Run this command
   ```
-  java -jar title.jar --genres=house
+  java -jar vine.jar --genres=house
   ```
 This would download house previews published on the day before yesterday to `previews/{date}`.
 
@@ -40,5 +40,5 @@ This would download house previews published on the day before yesterday to `pre
 The `--genres` parameter allows to specify one or more values separated by a comma. Here is an
 example for downloading previews for all supported genres:
 ```
-java -jar title.jar --genres=house,tech,funky,nudisco,soulful,soulfunk,deep,progressive,melodic,afro,techno,lounge,minimal,dnb
+java -jar vine.jar --genres=house,tech,funky,nudisco,soulful,soulfunk,deep,progressive,melodic,afro,techno,lounge,minimal,dnb
 ```
