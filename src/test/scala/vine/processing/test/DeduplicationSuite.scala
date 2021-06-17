@@ -1,7 +1,7 @@
 package vine.processing.test
 
 import vine.config.test.ConfigMock
-import vine.data.DatabaseService
+import vine.data.VineDatabaseImpl
 import vine.data.test._
 import vine.processing.Deduplication._
 import vine.providers.TrackDto
@@ -38,7 +38,7 @@ object DeduplicationSuite extends DefaultRunnableSpec {
 
         val test = for {
           result <- vine.processing.Deduplication.deduplicateOrEnqueue(trackDto)
-          dbTracks <- ZIO.service[DatabaseService].flatMap { db =>
+          dbTracks <- ZIO.service[VineDatabaseImpl].flatMap { db =>
             import db.profile.api._
             db.run(db.tracks.result)
           }
@@ -75,7 +75,7 @@ object DeduplicationSuite extends DefaultRunnableSpec {
         val test = for {
           track0 <- trackBuilder.build
           actual <- vine.processing.Deduplication.deduplicateOrEnqueue(trackDto)
-          dbTracks <- ZIO.service[DatabaseService].flatMap { db =>
+          dbTracks <- ZIO.service[VineDatabaseImpl].flatMap { db =>
             import db.profile.api._
             db.run(db.tracks.result)
           }
@@ -116,7 +116,7 @@ object DeduplicationSuite extends DefaultRunnableSpec {
         val test = for {
           track0 <- trackBuilder.build
           result <- vine.processing.Deduplication.deduplicateOrEnqueue(trackDto)
-          dbTracks <- ZIO.service[DatabaseService].flatMap { db =>
+          dbTracks <- ZIO.service[VineDatabaseImpl].flatMap { db =>
             import db.profile.api._
             db.run(db.tracks.result)
           }
@@ -158,7 +158,7 @@ object DeduplicationSuite extends DefaultRunnableSpec {
         val test = for {
           track0 <- trackBuilder.build
           result <- vine.processing.Deduplication.deduplicateOrEnqueue(trackDto)
-          dbTracks <- ZIO.service[DatabaseService].flatMap { db =>
+          dbTracks <- ZIO.service[VineDatabaseImpl].flatMap { db =>
             import db.profile.api._
             db.run(db.tracks.result)
           }
@@ -182,7 +182,7 @@ object DeduplicationSuite extends DefaultRunnableSpec {
         val test = for {
           track0    <- trackBuilder.build
           _         <- vine.processing.Deduplication.markAsCompleted(Duplicate(track0))
-          dbTracks  <- ZIO.service[DatabaseService].flatMap { db =>
+          dbTracks  <- ZIO.service[VineDatabaseImpl].flatMap { db =>
                         import db.profile.api._
                         db.run(db.tracks.result)
                       }
@@ -205,7 +205,7 @@ object DeduplicationSuite extends DefaultRunnableSpec {
         val test = for {
           track0    <- trackBuilder.build
           _         <- vine.processing.Deduplication.markAsCompleted(InProcess(track0))
-          dbTracks  <- ZIO.service[DatabaseService].flatMap { db =>
+          dbTracks  <- ZIO.service[VineDatabaseImpl].flatMap { db =>
             import db.profile.api._
             db.run(db.tracks.result)
           }
@@ -228,7 +228,7 @@ object DeduplicationSuite extends DefaultRunnableSpec {
         val test = for {
           track0    <- trackBuilder.build
           _         <- vine.processing.Deduplication.markAsCompleted(Enqueued(track0))
-          dbTracks  <- ZIO.service[DatabaseService].flatMap { db =>
+          dbTracks  <- ZIO.service[VineDatabaseImpl].flatMap { db =>
             import db.profile.api._
             db.run(db.tracks.result)
           }
@@ -251,7 +251,7 @@ object DeduplicationSuite extends DefaultRunnableSpec {
         val test = for {
           track0    <- trackBuilder.build
           _         <- vine.processing.Deduplication.markAsCompleted(Enqueued(track0))
-          dbTracks  <- ZIO.service[DatabaseService].flatMap { db =>
+          dbTracks  <- ZIO.service[VineDatabaseImpl].flatMap { db =>
             import db.profile.api._
             db.run(db.tracks.result)
           }

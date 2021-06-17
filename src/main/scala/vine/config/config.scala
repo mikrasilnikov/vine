@@ -63,7 +63,7 @@ package object config {
         _           <- putStr(s"Loading sources... ")
 
         jarPath     <- ZIO.effectTotal(
-          Path(new File(Config.getClass.getProtectionDomain.getCodeSource.getLocation.toURI).getPath).parent.get)
+                        Path(new File(Config.getClass.getProtectionDomain.getCodeSource.getLocation.toURI).getPath).parent.get)
 
         sourcesCfg  <- sourcesMode match {
                       case FromConfigFile(fileName) =>

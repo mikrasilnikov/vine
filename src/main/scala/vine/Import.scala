@@ -5,7 +5,7 @@ import vine.data._
 import vine.data.TrackParsing
 import vine.helpers.Conversions.OptionToZio
 import vine.ui.ProgressBarDimensions
-import vine.ui.consoleprogress.{ConsoleProgress, ConsoleProgressLive}
+import vine.ui.consoleprogress._
 import slick.jdbc.SQLiteProfile
 import zio._
 import zio.blocking.Blocking
@@ -14,7 +14,7 @@ import zio.console.{Console, putStrLn}
 import zio.duration.durationInt
 import zio.nio.core.file._
 import zio.nio.file._
-import zio.stream.{Sink, ZStream}
+import zio.stream._
 import java.io.IOException
 import java.nio.charset.StandardCharsets
 import java.time.LocalDate
@@ -27,8 +27,7 @@ object Import extends zio.App {
   case class Params(sourcePath : Path, outputPath : Path)
 
   private def printUsage = for {
-    _ <- putStrLn("Usage:   java -cp {jar} pd2.DataImport {OutputFile} {SourceDataPath}")
-    _ <- putStrLn("Example: java -cp PreviewsDownloader2.jar pd2.DataImport c:\\PreviewsDownloader2\\imported.db c:\\PreviwsDownloader\\data\\tracks")
+    _ <- putStrLn("Example: java -cp vine.jar vine.Import imported.db c:\\vine\\data\\tracks")
   } yield ()
 
   private def parseAndValidateParams(args: List[String]) = {
@@ -36,12 +35,9 @@ object Import extends zio.App {
       _ <- ZIO.fail(new IllegalArgumentException("Expecting two arguments")).unless(args.length == 2)
       outputPath = Path(args(0))
       sourcePath = Path(args(1))
-      outputParent  <- ZIO.fromOption(outputPath.parent).orElseFail(new IOException("outputPath.parent is empty"))
-      _ <- ZIO.fail(new IOException(s"File $outputPath already exists"))       .whenM  (Files.exists(outputPath))
-      _ <- ZIO.fail(new IOException(s"Path $outputParent does not exist"))     .unlessM(Files.exists(outputParent))
-      _ <- ZIO.fail(new IOException(s"Path $outputParent is not a directory")) .unlessM(Files.isDirectory(outputParent))
-      _ <- ZIO.fail(new IOException(s"Path $sourcePath does not exist"))       .unlessM(Files.exists(sourcePath))
-      _ <- ZIO.fail(new IOException(s"Path $sourcePath is not a directory"))   .unlessM(Files.isDirectory(sourcePath))
+      _ <- ZIO.fail(new IOException(s"File $outputPath already exists"))    .whenM  (Files.exists(outputPath))
+      _ <- ZIO.fail(new IOException(s"Path $sourcePath does not exist"))    .unlessM(Files.exists(sourcePath))
+      _ <- ZIO.fail(new IOException(s"Path $sourcePath is not a directory")).unlessM(Files.isDirectory(sourcePath))
     } yield Params(sourcePath, outputPath)
   }
 
@@ -53,30 +49,30 @@ object Import extends zio.App {
 
       val databaseService =
         Backend.makeLayer(SQLiteProfile, Backend.makeSqliteLiveConfig(params.outputPath)) >>>
-        DatabaseService.makeLayer(SQLiteProfile)
+        VineDatabaseImpl.makeLayer(SQLiteProfile)
 
       val consoleProgress =
         (system.System.live ++ Console.live) >>>
           ConsoleProgressLive.makeLayer(ProgressBarDimensions(25, 60))
 
       databaseService ++ consoleProgress
-
     }
 
     val app = parseAndValidateParams(args)
       .foldM (
-        e => printUsage,
+        e => putStrLn(e.getMessage + "\n") *> printUsage,
         params => performImport(params).provideCustomLayer(customLayer(params)))
 
     app.exitCode
   }
 
   private def performImport(params : Params)
-    : ZIO[Console with Has[DatabaseService] with ConsoleProgress with Blocking with Clock, Throwable, Unit] =
+    : ZIO[Console with VineDatabase with ConsoleProgress with Blocking with Clock, Throwable, Unit] =
   {
     val batchSize = 100
 
-    ZIO.service[DatabaseService].flatMap{ db =>
+    ZIO.service[VineDatabaseImpl].flatMap { db =>
+
       import db.profile.api._
 
       for {
@@ -87,29 +83,24 @@ object Import extends zio.App {
           .filter(path => path.filename.toString.endsWith(".txt"))
           .runCollect
 
-        _ <- putStrLn(s"Dropping index ixUniqueName...")
-        _ <- db.run(sqlu""" DROP INDEX "ixUniqueName" """)
-
         progressBucket<- ConsoleProgress.initializeBar("Processing files", List(files.length)).map(_.head)
         progressFiber <- ConsoleProgress.drawProgress.repeat(Schedule.duration(333.millis)).forever.fork
 
-
         hashRef   <- Ref.make[HashSet[String]](HashSet[String]())
         _         <- ZIO.foreach_(files) { filePath =>
-                      uniqueTracksStream(filePath, hashRef).foreach { track =>
-                        db.run(db.tracks += track) *>
-                        ConsoleProgress.completeOne(progressBucket)
-                      }
+                      uniqueTracksStream(filePath, hashRef)
+                        .grouped(batchSize)
+                        .foreach { track =>
+                          db.run((db.tracks ++= track).transactionally)
+                      } *> ConsoleProgress.completeOne(progressBucket)
                     }
-        _         <- clock.sleep(500.millis) *> progressFiber.interrupt
-        _         <- putStrLn(s"Creating index ixUniqueName...")
-        _         <- db.run(sqlu""" CREATE UNIQUE INDEX "ixUniqueName" ON "tracks" ("UniqueName") """)
+        _         <- clock.sleep(667.millis) *> progressFiber.interrupt
       } yield ()
     }
   }
 
   /**
-   * Builds a stream of unique tracks from a text file (v1 database format).
+   * Builds a stream of unique tracks from a text file (v1 csv format).
    * @param hashRef a reference to a hash set which is used for keeping track of duplicate unique names.
    * */
   private def uniqueTracksStream(

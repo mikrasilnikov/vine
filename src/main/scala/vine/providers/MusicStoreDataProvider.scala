@@ -40,8 +40,7 @@ trait MusicStoreDataProvider {
       feed          : Feed,
       dateFrom      : LocalDate,
       dateTo        : LocalDate,
-      queue         : Queue[TrackMsg],
-      completionP   : Promise[Nothing, Unit]) // Signals to consumers that publishing to queue is finished.
+      queue         : Queue[TrackMsg])
     : ZIO[Counters with ConsoleProgress with Clock with Logging with ConnectionsLimiter with ConsoleProgress,
       Throwable, Unit]
     =
@@ -93,7 +92,6 @@ trait MusicStoreDataProvider {
           }
 
         _   <- firstFiber.join
-        _   <- completionP.succeed()
      } yield ()
 
   def processIntermediatePage(

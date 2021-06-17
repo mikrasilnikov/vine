@@ -1,7 +1,7 @@
 package vine.data.test
 
 import vine.config.test.ConfigMock
-import vine.data.DatabaseService
+import vine.data.VineDatabaseImpl
 import vine.providers.TrackDto
 import zio._
 import zio.logging.slf4j.Slf4jLogger
@@ -33,7 +33,7 @@ object TrackTestDataBuilderSuite extends DefaultRunnableSpec {
         val test = for {
           _         <- trackBuilder1.build
           _         <- trackBuilder2.build
-          dbTracks  <- ZIO.service[DatabaseService].flatMap { db =>
+          dbTracks  <- ZIO.service[VineDatabaseImpl].flatMap { db =>
                           import db.profile.api._
                           db.run(db.tracks.result)
                         }

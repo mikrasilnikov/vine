@@ -1,6 +1,6 @@
 package vine.data.test
 
-import vine.data.DatabaseService
+import vine.data.VineDatabaseImpl
 import zio.{Has, ZIO}
 
 import java.util.concurrent.ConcurrentHashMap
@@ -8,7 +8,7 @@ import scala.collection.mutable
 import scala.reflect.{ClassTag, classTag}
 
 trait TestDataBuilder[Entity] {
-  def build : ZIO[Has[DatabaseService], Throwable, Entity]
+  def build : ZIO[Has[VineDatabaseImpl], Throwable, Entity]
 }
 
 object TestDataBuilder {

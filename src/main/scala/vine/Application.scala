@@ -26,6 +26,7 @@ import zio.nio.core.file.Path
 import zio.nio.file.Files
 import zio.system.System
 import vine.processing._
+import zio.Cause._
 import java.time.format.DateTimeFormatter
 import java.time._
 import scala.util.Try
@@ -41,7 +42,7 @@ object Application extends zio.App {
 
     val effect = for {
       _             <- log.info("Application starting...")
-
+      _             <- ZIO.service[VineDatabaseImpl].flatMap(_.createSchemaIfNotExists)
       header        <- createHeader
       progressFiber <- ConsoleProgress.drawProgress(List(header, "")).repeat(Schedule.fixed(500.millis)).forever.fork
       feeds         <- Config.sourcesConfig.map(_.feeds)
@@ -53,7 +54,14 @@ object Application extends zio.App {
     makeEnvironmentOption(args) match {
       case None => printUsage.exitCode
       case Some(env) => logErrors(effect).provideCustomLayer(env)
-        .catchAll(e => putStrLn(e.toString)).exitCode
+        .catchAllCause {
+          case Die(t) => putStrLn(s"Died with ${t.getMessage}")
+          case Fail(t) => t match {
+            case th : Throwable => putStrLn(s"Died with ${th.getMessage}")
+            case e => putStrLn(s"Died with ${e.toString}")
+          }
+          case cause => putStrLn(cause.prettyPrint)
+        }.exitCode
     }
   }
 
@@ -129,7 +137,7 @@ object Application extends zio.App {
 
     val database =
       Backend.makeLayer(SQLiteProfile, Backend.makeSqliteLiveConfig(dbFilePath)) >>>
-        DatabaseService.makeLayer(SQLiteProfile)
+        VineDatabaseImpl.makeLayer(SQLiteProfile)
 
     val logging = Slf4jLogger.make ((_, message) => message)
 

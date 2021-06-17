@@ -19,6 +19,7 @@ package object consoleprogress {
     {
       def initializeBar(label : String, bucketSizes : Seq[Int]) : ZIO[Any, Nothing, Seq[BucketRef]]
       def completeBar(label : String) : ZIO[Any, Nothing, Unit]
+      def failBar(label : String) : ZIO[Any, Nothing, Unit]
 
       def completeMany(bucketRef : BucketRef, amount : Int) : ZIO[Any, Nothing, Unit]
       def failMany(bucketRef : BucketRef, amount : Int) : ZIO[Any, Nothing, Unit]

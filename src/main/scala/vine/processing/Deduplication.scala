@@ -21,7 +21,7 @@ object Deduplication {
   def deduplicateOrEnqueue(dto: TrackDto)
   : ZIO[Config with VineDatabase with Logging, Throwable, DeduplicationResult] =
   {
-    ZIO.service[DatabaseService].flatMap { db =>
+    ZIO.service[VineDatabaseImpl].flatMap { db =>
       import db.profile.api._
       for {
         runId <- Config.runId
@@ -63,7 +63,7 @@ object Deduplication {
   def markAsCompleted(deduplicationResult: DeduplicationResult): ZIO[VineDatabase, Throwable, Unit] =
   {
     def doMark(trackId : Int) =
-      ZIO.service[DatabaseService].flatMap { db =>
+      ZIO.service[VineDatabaseImpl].flatMap { db =>
       import db.profile.api._
       for {
         _ <- ZIO.succeed()

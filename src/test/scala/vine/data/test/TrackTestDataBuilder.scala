@@ -1,7 +1,7 @@
 package vine.data.test
 
 import vine.data.test.TestDataBuilder.genString
-import vine.data.{DatabaseService, Track, TrackParsing}
+import vine.data.{VineDatabaseImpl, Track, TrackParsing}
 import zio.{Has, ZIO}
 
 import java.time.{LocalDate, LocalDateTime}
@@ -28,7 +28,7 @@ case class TrackTestDataBuilder(
   def withQueued(value : LocalDateTime) = this.copy(queued = Some(Some(value)))
   def withoutQueued = this.copy(queued = Some(None))
 
-  def build : ZIO[Has[DatabaseService], Throwable, Track] = {
+  def build : ZIO[Has[VineDatabaseImpl], Throwable, Track] = {
 
     val resArtist     = artist.fold(genString[Track]("Artist"))(identity)
     val resTitle      = title.fold(genString[Track]("Title"))(identity)
@@ -40,7 +40,7 @@ case class TrackTestDataBuilder(
 
     val entity = Track(resArtist, resTitle, resUniqueName, resLabel, resReleaseDate, resFeed, resQueued)
 
-    ZIO.service[DatabaseService].flatMap { db =>
+    ZIO.service[VineDatabaseImpl].flatMap { db =>
       import db.profile.api._
       for {
         newId <- db.run(db.tracks returning db.tracks.map(_.id) += entity)

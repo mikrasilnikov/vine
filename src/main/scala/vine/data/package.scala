@@ -1,7 +1,7 @@
 package vine
 
-import zio.Has
+import zio._
 
 package object data {
-  type VineDatabase = Has[DatabaseService]
+  type VineDatabase = Has[VineDatabaseImpl]
 }

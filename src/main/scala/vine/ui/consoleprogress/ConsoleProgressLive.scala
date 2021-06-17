@@ -58,6 +58,27 @@ final case class ConsoleProgressLive(
     }
   }
 
+  def failBar(label: String): ZIO[Any, Nothing, Unit] = {
+    progressBarsRef.modify { bars =>
+      ZIO.succeed {
+        val existingBarIndex = bars.indexWhere(_.layout.label == label)
+        existingBarIndex match {
+          // If there is no existing bar with provided label we append new bar which is failed.
+          case -1 =>
+            val newBar = BucketProgressBar(
+              Vector[ProgressBucket](ProgressBucket(size = 1, completed = 0, failed = 1)),
+              ProgressBarLayout(label, defaultDimensions))
+            ((), bars.appended(newBar))
+          case i =>
+            // Preserving completed items count.
+            val failedBuckets = bars(i).buckets.map(b => ProgressBucket(b.size, b.completed, b.size - b.completed))
+            val newBar = bars(i).copy(buckets = failedBuckets)
+            ((), bars.updated(i, newBar))
+        }
+      }
+    }
+  }
+
   def completeOne(bucketRef: BucketRef): ZIO[Any, Nothing, Unit] = modify(bucketRef, true, 1)
   def failOne(bucketRef: BucketRef): ZIO[Any, Nothing, Unit] = modify(bucketRef, false, 1)
 

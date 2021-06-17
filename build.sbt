@@ -1,5 +1,5 @@
-name := "PreviewsDownloader2"
-version := "0.1"
+name := "vine"
+version := "1.0.0"
 scalaVersion := "2.13.5"
 
 libraryDependencies ++= Seq(

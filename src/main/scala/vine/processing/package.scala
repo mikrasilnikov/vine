@@ -42,12 +42,16 @@ package object processing {
       completionP <- Promise.make[Nothing, Unit]
 
       workers     <- ZIO.forkAll(List.fill(workerNum)(
-        runWorker(queue, completionP)(msg => processTrack(msg, filter, feedPath, folderSem))))
+                      runWorker(queue, completionP)(msg => processTrack(msg, filter, feedPath, folderSem))))
 
-      _           <- provider.processTracks(feed, from, to, queue, completionP)
+      _           <- provider.processTracks(feed, from, to, queue)
+                      .catchAllCause(c =>
+                        log.error(c.prettyPrint) *>
+                        ConsoleProgress.failBar(feed.name))
 
+      _           <- completionP.succeed()
       _           <- workers.join
-      //_           <- queue.size.flatMap(rem => log.info(s"feed ${feed.name} completed. $rem messages remaining."))
+
       _           <- queue.shutdown
     } yield ()
   }
