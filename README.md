@@ -3,11 +3,11 @@
 # Vine
 
 Vine is a tool for DJs and electronic music lovers that allows them to quickly listen to previews
-for new tracks in popular online music stores (Beatport and Traxsource). The program saves time by
+of new tracks in popular online music stores (Beatport and Traxsource). The program saves time by
 downloading previews and allows user to employ his/her favorite media player.
 
 If you are happy with your favorite streaming service and wondering why anyone would want to
-listen to any previews anywhere nowadays, then you are a normal person and vine is not for you.
+listen to any previews nowadays, then you are a normal person and vine is not for you.
 
 ### What's the problem?
 There are many.
@@ -18,10 +18,10 @@ There are many.
   the tracks is crap by any standards. Sure some good ones appear in charts but others end up under a
   pile of garbage.
 - Music is being duplicated across different sites. Some tracks are being released on different labels.
-  A single track may be published a dozen of times. There is no way anyone can remember hundreds of thousands
+  A single track may be published a dozen of times. There is no way anyone could remember hundreds of thousands
   titles to avoid listening to the same tune over and over again.
 
-All of this makes many DJs rely on charts and selections often making sounding of the former derivative.
+All of this makes many DJs rely on charts and selections considerably limiting their choice.
 
 ### How Vine solves these problems?
 - Vine downloads previews from specified period and enables user to evaluate them offline.
@@ -64,14 +64,14 @@ Unfortunately, at the moment, Beatport has a problem with showing results for la
 
 #### Do I have to type it all by hand every time?
 No. The archive with the program contains the files `run.bat` and` run.sh` for different
-operating systems. You can specify the desired styles in them and simply change the date before every run.
+operating systems. You can specify the desired genres in them and simply change the date before every run.
 
 ### `my` genre
 Vine has a feature similar to the [My Traxsource](https://www.traxsource.com/my-traxsource/my-tracks) and
 [My Beatport](https://www.beatport.com/my-beatport) sections. You can create a list of artists and labels whose releases
 will be downloaded to the `previews/{date}/01-my-traxsource` and` previews/{date}/01-my-beatport` folders.
-By default, lists are being read from `data\MyArtists.txt` and `data\MyLabels.txt`. To download your personal selection,
-you need to add `my` to the list of genres:
+By default, lists are being read from `data\MyArtists.txt` and `data\MyLabels.txt`. To download your personal selection 
+add `my` to the list of genres:
 ```
 java -jar vine.jar --genres=my,house
 ```
@@ -89,12 +89,12 @@ In this file, you can specify sources for downloading previews and set additiona
 file with the name `config.sample.json` is included.
 
 ### Limitations for Date Ranges
-- Currently (2021-06-17) beatport incorrectly displays lists longer than 10,000 items. When this problem occurs,
+- Currently (2021-06-17) Beatport incorrectly displays lists longer than 10,000 items. When this problem occurs,
   exclamation marks will be displayed on the progress bar:
 
   ![alt text](https://github.com/mikrasilnikov/PreviewsDownloader2/blob/main/img/beatport-10k.png "beatport 10k bug")
 
-  and entries like these would appear in the log file
+  and entries like these would appear in the `vine.log` file
   ```
   Got empty last page of 01-my-beatport. Beatport 10K bug?
   Empty intermediate page (Beatport 10K bug?): Right(https://www.beatport.com/tracks/all?per-page=150&start-date=2021-01-01&end-date=2021-01-08&page=67)
@@ -115,9 +115,8 @@ Vine - это инструмент для DJ и любителей электр�
 превью новых треков из популярных музыкальных магазинов (Beatport и Traxsource). Программа экономит
 время, скачивая превью, и дает возможность использовать свой плеер для прослушивания.
 
-Если вы вполне довольны вашим любимым стриминговым сервисом и не понимаете, зачем вообще нужно в
-наши дни слушать какие-то превью в каких-то музыкальных магазинах, то вы нормальный человек и это
-все не для вас.
+Если вы вполне довольны вашим стриминговым сервисом и не понимаете, зачем вообще нужно в наши дни слушать 
+какие-то превью в каких-то музыкальных магазинах, то вы нормальный человек и это все не для вас.
 
 ### В чем проблема?
 Их много.
@@ -133,8 +132,7 @@ Vine - это инструмент для DJ и любителей электр�
   В итоге одна композиция может быть опубликована десяток раз. Никто не в состоянии запомнить сотни тысяч
   названий, чтобы не слушать одно и то же.
 
-Все это заставляет многих DJ-ев полагаться на чарты и подборки, что часто делает звучание первых
-вторичным.
+Все это заставляет многих DJ-ев полагаться на чарты и подборки, что существенно ограничивает их выбор.
 
 ### Как Vine решает эти проблемы?
 - Vine скачивает превью за определенный период чтобы можно было послушать их быстро офлайн.
@@ -174,9 +172,8 @@ java -jar vine.jar --genres=house,tech,funky,nudisco,soulful,soulfunk,deep,progr
   ```
 
 Границы диапазонов указываются включительно.
-В примере выше превью будут скачиваться и за 1-е, и за 7-е число.
-К сожалению, на данный момент, у Beatport-а есть проблема с выдачей результатов за большие диапазоны.
-См. примечание ниже о диапазонах дат.
+В примере выше превью будут скачиваться и за 1-е, и за 7-е июня. К сожалению, на данный момент, у Beatport-а есть 
+проблема с выдачей результатов за большие диапазоны. См. раздел о диапазонах дат.
 
 #### Каждый раз надо это все печатать руками?
 Это не обязательно. В архиве с программой есть файлы `run.bat` и `run.sh` для разных операционных систем.
@@ -185,8 +182,9 @@ java -jar vine.jar --genres=house,tech,funky,nudisco,soulful,soulfunk,deep,progr
 ### Стиль `my`
 Vine имеет функцию, аналогичную разделам  [My Traxsource](https://www.traxsource.com/my-traxsource/my-tracks) и
 [My Beatport](https://www.beatport.com/my-beatport). Можно создать список исполнителей и лейблов, релизы которых
-будут скачиваться в папки `01-my-traxsource` и `01-my-beatport`. По умолчанию списки находятся в файлах
-`data\MyArtists.txt` и `data\MyLabels.txt`. Чтобы скачать свою персональную подборку, нужно добавить `my` к списку стилей:
+будут скачиваться в папки `previews/{date}/01-my-traxsource` и `previews/{date}/01-my-beatport`. По умолчанию списки 
+находятся в файлах `data\MyArtists.txt` и `data\MyLabels.txt`. Чтобы скачать свою персональную подборку, нужно 
+добавить `my` к списку стилей:
 
 ```
 java -jar vine.jar --genres=my,house
@@ -212,7 +210,7 @@ java -jar vine.jar --config=config.json --date=2021-06-01
 
 ![alt text](https://github.com/mikrasilnikov/PreviewsDownloader2/blob/main/img/beatport-10k.png "beatport 10k bug")
 
-а в логах появятся записи
+а в файле `vine.log` появятся записи
 
   ```
   Got empty last page of 01-my-beatport. Beatport 10K bug?

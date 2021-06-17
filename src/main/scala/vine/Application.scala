@@ -150,10 +150,9 @@ object Application extends zio.App {
 
   private def printUsage : ZIO[Console, Throwable, Unit] = for {
     _ <- putStrLn("Examples:")
-    _ <- putStrLn("java -jar vine.jar --date=2021-05-01")
-    _ <- putStrLn("java -jar vine.jar --date=2021-05-01,2021-05-02")
-    _ <- putStrLn("java -jar vine.jar --date=2021-05-01,2021-05-02 --config=config.json")
-    _ <- putStrLn("java -jar vine.jar --date=2021-05-01,2021-05-02 --config=config.json --database=data.db --maxConnections=16")
+    _ <- putStrLn("java -jar vine.jar --genres=house")
+    _ <- putStrLn("java -jar vine.jar --genres=house --date=2021-05-01,2021-05-02")
+    _ <- putStrLn("java -jar vine.jar --config=config.json --date=2021-05-01,2021-05-02")
   } yield ()
 
   /** "2021-06-01,2021-06-03" */
