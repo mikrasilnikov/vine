@@ -26,22 +26,12 @@ libraryDependencies ++= Seq(
   "org.scala-lang.modules" %% "scala-xml" % "1.3.0"
 )
 
+testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework")
 
 scalacOptions += "-Ymacro-annotations"
 
-testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework")
-
-assembly / mainClass := Some("pd2.Application")
-assembly / assemblyJarName := "PreviewsDownloader2.jar"
-
-Compile / mainClass := Some("pd2.Application")
-
-// [Required] Enable plugin and automatically find def main(args:Array[String]) methods from the classpath
-enablePlugins(PackPlugin)
-
-// [Optional] Specify main classes manually
-// This example creates `hello` command (target/pack/bin/hello) that calls org.mydomain.Hello#main(Array[String])
-packMain := Map("hello" -> "pd2.Application")
+assembly / mainClass := Some("vine.Application")
+assembly / assemblyJarName := "vine.jar"
 
 assembly / assemblyMergeStrategy := {
   case PathList("META-INF", "DUMMY.DSA") => MergeStrategy.discard
