@@ -3,14 +3,13 @@
 
   "filters": {
     "my": {
-      "artistsFile": "data/HouseArtists.txt",
-      "labelsFile": "data/HouseLabels.txt"
+      "artistsFile": "data/MyArtists.txt",
+      "labelsFile": "data/MyLabels.txt"
     },
     "noShit": {
       "dataFiles":
       [
-        "data/ShitLabels.txt",
-        "data/LabelsToBan.txt"
+        "data/ShitLabels.txt"
       ]
     },
     "noEdits": {
