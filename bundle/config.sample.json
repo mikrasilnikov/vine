@@ -1,0 +1,107 @@
+{
+	"previewsFolder": "previews/{0}",
+
+	"filters": {
+		"my": {
+			"artistsFile": "data/MyArtists.txt",
+			"labelsFile": "data/MyLabels.txt"
+		},
+		"noShit": {
+			"dataFiles": 
+				[ 
+					"data/ShitLabels.txt"
+				]
+		},
+		"noEdits": {
+			"minTrackDurationSeconds": 300
+		}
+	},
+
+	"feeds": [
+		{ 	
+			"name": "01-my-traxsource",
+			"provider": "traxsource",
+			"urlTemplate": "/just-added?cn=tracks&ipp=100&period={0},{1}",
+			"filters": [ "my", "noEdits" ]
+		},
+		{ 	
+			"name": "01-my-beatport",
+			"provider": "beatport",
+			"urlTemplate": "/tracks/all?per-page=150&start-date={0}&end-date={1}",
+			"filters": [ "my", "noEdits" ]
+		},
+
+		{ 	
+			"name": "02-traxsource-house-top",
+			"provider": "traxsource",
+			"urlTemplate": "/genre/4/house/top",
+			"filters": [ ]
+		},
+		{ 	
+			"name": "02-traxsource-tech-top",
+			"provider": "traxsource",
+			"urlTemplate": "/genre/18/tech-house/top",
+			"filters": [ ]
+		},
+		{ 	
+			"name": "02-beatport-house-top",
+			"provider": "beatport",
+			"urlTemplate": "/genre/house/5/top-100",
+			"filters": [ ]
+		},
+		{ 	
+			"name": "02-beatport-tech-top",
+			"provider": "beatport",
+			"urlTemplate": "/genre/tech-house/11/top-100",
+			"filters": [ ]
+		},
+		{	
+			"name": "04-traxsource-house-featured",
+			"provider": "traxsource",
+			"urlTemplate": "/genre/4/house/featured?cn=tracks&ipp=100&period={0},{1}&gf=4",
+			"filters": [ "noEdits" ]
+		},
+		{	
+			"name": "04-traxsource-tech-featured",
+			"provider": "traxsource",
+			"urlTemplate": "/genre/18/tech-house/featured?cn=tracks&ipp=100&period={0},{1}&gf=18",
+			"filters": [ "noEdits" ]
+		},	
+		{ 	
+			"name": "04-beatport-house-hype",
+			"provider": "beatport",
+			"urlTemplate": "/genre/house/5/hype-100",
+			"filters": [ "noEdits" ]
+		},	
+		{ 	
+			"name": "04-beatport-tech-hype",
+			"provider": "beatport",
+			"urlTemplate": "/genre/tech-house/11/hype-100",
+			"filters": [ "noEdits" ]
+		},
+		{	
+			"name": "05-traxsource-house-all",
+			"provider": "traxsource",
+			"urlTemplate": "/genre/4/house/all?cn=tracks&ipp=100&period={0},{1}&gf=4",
+			"filters": [ "noShit", "noEdits" ]
+		},			
+		{	
+			"name": "05-traxsource-tech-all",
+			"provider": "traxsource",
+			"urlTemplate": "/genre/18/tech-house/all?cn=tracks&ipp=100&period={0},{1}&gf=18",
+			"filters": [ "noShit", "noEdits" ]
+		},	
+		{	
+			"name": "05-beatport-house",
+			"provider": "beatport",
+			"urlTemplate": "/genre/house/5/tracks?per-page=150&start-date={0}&end-date={1}",
+			"filters": [ "noShit", "noEdits" ]
+		},
+		{	
+			"name": "05-beatport-tech",
+			"provider": "beatport",
+			"urlTemplate": "/genre/tech-house/11/tracks?per-page=150&start-date={0}&end-date={1}",
+			"filters": [ "noShit", "noEdits" ]
+		}
+	]
+}
