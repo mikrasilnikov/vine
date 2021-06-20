@@ -1,5 +1,6 @@
 package vine
 
+import org.fusesource.jansi.AnsiConsole
 import vine.data.TrackParsing._
 import vine.data._
 import vine.data.TrackParsing
@@ -43,6 +44,7 @@ object Import extends zio.App {
 
   def run(args: List[String]) = {
 
+    AnsiConsole.systemInstall()
     vine.Application.configureLogging
 
     def customLayer(params : Params) = {
